@@ -1,0 +1,56 @@
+[
+  {
+    "id": "bree_rank",
+    "name": "Bree Taxi Rank",
+    "type": "taxi",
+    "lat": -26.2036,
+    "lng": 28.0405,
+    "safety_level": "yellow",
+    "recent_reports": 3
+  },
+  {
+    "id": "park_station",
+    "name": "Park Station",
+    "type": "train",
+    "lat": -26.1967,
+    "lng": 28.0413,
+    "safety_level": "red",
+    "recent_reports": 7
+  },
+  {
+    "id": "rosebank_gautrain",
+    "name": "Rosebank Gautrain",
+    "type": "train",
+    "lat": -26.1449,
+    "lng": 28.0401,
+    "safety_level": "green",
+    "recent_reports": 1
+  },
+  {
+    "id": "baragwanath_taxi",
+    "name": "Baragwanath Taxi Rank",
+    "type": "taxi",
+    "lat": -26.2700,
+    "lng": 27.9700,
+    "safety_level": "orange",
+    "recent_reports": 5
+  },
+  {
+    "id": "gandhi_square",
+    "name": "Gandhi Square Bus Terminal",
+    "type": "bus",
+    "lat": -26.2041,
+    "lng": 28.0416,
+    "safety_level": "yellow",
+    "recent_reports": 2
+  },
+  {
+    "id": "yeoville_taxi",
+    "name": "Yeoville Taxi Rank",
+    "type": "taxi",
+    "lat": -26.1820,
+    "lng": 28.0580,
+    "safety_level": "red",
+    "recent_reports": 6
+  }
+]

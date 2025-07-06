@@ -1,5 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import json
+from pathlib import Path
 
 app = FastAPI()
 
@@ -11,6 +13,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/")
-def read_root():
-    return {"message": "SafeCommute API running"}
+@app.get("/stations")
+def get_stations():
+    data_path = Path(__file__).parent / "data" / "stations.json"
+    with open(data_path, "r") as f:
+        stations = json.load(f)
+    return stations
