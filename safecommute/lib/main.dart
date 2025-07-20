@@ -20,6 +20,23 @@ class SafeCommuteApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp();
+    return MaterialApp(
+      title: 'SafeCommute',
+      theme: AppTheme.lightTheme,
+      darkTheme: AppTheme.darkTheme,
+      themeMode: ThemeMode.system,
+      home: AuthScreen(),
+      routes: {
+        '/auth': (context) => AuthScreen(),
+        '/home': (context) => HomeScreen(),
+        //'/route-planning': (context) => RoutePlanningScreen(),
+        //'/live-navigation': (context) => LiveNavigationScreen(),
+        //'/safety-reporting': (context) => SafetyReportingScreen(),
+        //'/safety-alerts': (context) => SafetyAlertsScreen(),
+        '/emergency-sos': (context) => EmergencySosScreen(),
+        '/profile-settings': (context) => ProfileSettingsScreen(),
+      },
+      debugShowCheckedModeBanner: false,
+    );
   }
 }
