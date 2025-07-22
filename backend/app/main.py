@@ -1,7 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-import json
-from pathlib import Path
+from backend.app.routes import stations
 
 app = FastAPI()
 
@@ -13,9 +12,4 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-@app.get("/stations")
-def get_stations():
-    data_path = Path(__file__).parent / "data" / "stations.json"
-    with open(data_path, "r") as f:
-        stations = json.load(f)
-    return stations
+app.include_router(stations.router)
