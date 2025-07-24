@@ -1,8 +1,11 @@
-from fastapi import APIRouter
-from backend.app.services.station_service import get_all_stations
+from fastapi import APIRouter, HTTPException
+from backend.app.services import station_service
 
 router = APIRouter()
 
-@router.get("/stations")
-def fetch_stations():
-    return get_all_stations()
+@router.get("/stations/{id}")
+def get_station(id: str):
+    station = station_service.get_station_by_id(id)
+    if not station:
+        raise HTTPException(status_code=404, detail="Station not found")
+    return station
