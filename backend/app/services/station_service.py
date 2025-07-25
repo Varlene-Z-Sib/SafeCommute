@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 from math import radians, cos, sin, sqrt, atan2
+from collections import Counter
 
 data_path = Path(__file__).parent.parent / "data" / "stations.json"
 
@@ -44,3 +45,40 @@ def get_nearby_stations(lat: float, lng: float, radius_km: float = 3.0):
     # Optional: sort by distance
     nearby.sort(key=lambda s: s["distance_km"])
     return nearby
+
+def get_stations_by_safety_level(level: str):
+    stations = load_stations()
+    return [station for station in stations if station.get("safety_level") == level.lower()]
+
+def get_station_summary():
+    stations = load_stations()
+    total = len(stations)
+    types = Counter(station.get("type") for station in stations)
+    safety_levels = Counter(station.get("safety_level") for station in stations)
+
+    return {
+        "total_stations": total,
+        "by_type": dict(types),
+        "by_safety_level": dict(safety_levels)
+    }
+
+def get_safest_nearby_station(lat: float, lng: float):
+    safety_order = {"green": 1, "yellow": 2, "orange": 3, "red": 4}
+    stations = load_stations()
+
+    sorted_stations = sorted(
+        stations,
+        key=lambda s: (
+            safety_order.get(s.get("safety_level"), 5),
+            haversine(lat, lng, s["lat"], s["lng"])
+        )
+    )
+
+    if not sorted_stations:
+        return None
+
+    best_station = sorted_stations[0]
+    best_station["distance_km"] = round(haversine(lat, lng, best_station["lat"], best_station["lng"]), 2)
+    return best_station
+
+
