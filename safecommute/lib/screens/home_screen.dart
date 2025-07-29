@@ -1,8 +1,10 @@
+// screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../../utils/app_colors.dart';
 import '../../widgets/custom_bottom_navigation.dart';
 import '../../widgets/safety_status_widget.dart';
 import '../../widgets/emergency_button.dart';
+import '../../widgets/emergency_type_selector.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -16,6 +18,7 @@ class _HomeScreenState extends State<HomeScreen> {
   final bool _isOnline = true;
   final String _currentLocation = 'Johannesburg CBD';
   String _safetyLevel = 'Safe';
+  bool _showEmergencySelector = false;
 
   @override
   Widget build(BuildContext context) {
@@ -69,100 +72,123 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      body: RefreshIndicator(
-        onRefresh: _refreshData,
-        child: SingleChildScrollView(
-          physics: AlwaysScrollableScrollPhysics(),
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Location Header
-              Row(
+      body: Stack(
+        children: [
+          RefreshIndicator(
+            onRefresh: _refreshData,
+            child: SingleChildScrollView(
+              physics: AlwaysScrollableScrollPhysics(),
+              padding: EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Icon(
-                    Icons.location_on,
-                    color: AppColors.primaryBlue,
-                    size: 20,
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      _currentLocation,
-                      style: Theme.of(context).textTheme.headlineMedium,
-                    ),
-                  ),
-                ],
-              ),
-              SizedBox(height: 24),
-
-              // Plan Safe Route Button
-              SizedBox(
-                width: double.infinity,
-                height: 64,
-                child: ElevatedButton(
-                  onPressed: () =>
-                      Navigator.pushNamed(context, '/route-planning'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primaryBlue,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(32),
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
+                  // Location Header
+                  Row(
                     children: [
-                      Icon(Icons.directions, size: 28),
-                      SizedBox(width: 12),
-                      Text(
-                        'Plan Safe Route',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
+                      Icon(
+                        Icons.location_on,
+                        color: AppColors.primaryBlue,
+                        size: 20,
+                      ),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          _currentLocation,
+                          style: Theme.of(context).textTheme.headlineMedium,
                         ),
                       ),
                     ],
                   ),
+                  SizedBox(height: 24),
+
+                  // Plan Safe Route Button
+                  SizedBox(
+                    width: double.infinity,
+                    height: 64,
+                    child: ElevatedButton(
+                      onPressed: () =>
+                          Navigator.pushNamed(context, '/route-planning'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primaryBlue,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(32),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.directions, size: 28),
+                          SizedBox(width: 12),
+                          Text(
+                            'Plan Safe Route',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  SizedBox(height: 24),
+
+                  // Safety Status Widget
+                  SafetyStatusWidget(
+                    safetyLevel: _safetyLevel,
+                    location: _currentLocation,
+                  ),
+                  SizedBox(height: 24),
+
+                  // Emergency SOS Button
+                  EmergencyButton(
+                    onPressed: () =>
+                        Navigator.pushNamed(context, '/emergency-sos'),
+                  ),
+                  SizedBox(height: 24),
+
+                  // Recent Safety Alerts
+                  Text(
+                    'Recent Safety Alerts',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  SizedBox(height: 16),
+                  _buildRecentAlerts(),
+                  SizedBox(height: 24),
+
+                  // Quick Actions
+                  Text(
+                    'Quick Actions',
+                    style: Theme.of(context).textTheme.headlineMedium,
+                  ),
+                  SizedBox(height: 16),
+                  _buildQuickActions(),
+                ],
+              ),
+            ),
+          ),
+          // Emergency Type Selector Overlay
+          if (_showEmergencySelector)
+            GestureDetector(
+              onTap: _hideEmergencySelector,
+              child: Container(
+                color: Colors.transparent,
+                child: Column(
+                  children: [
+                    Spacer(),
+                    EmergencyTypeSelector(
+                      onEmergencySelected: _handleEmergencySelected,
+                      onCancel: _hideEmergencySelector,
+                    ),
+                  ],
                 ),
               ),
-              SizedBox(height: 24),
-
-              // Safety Status Widget
-              SafetyStatusWidget(
-                safetyLevel: _safetyLevel,
-                location: _currentLocation,
-              ),
-              SizedBox(height: 24),
-
-              // Emergency SOS Button
-              EmergencyButton(
-                onPressed: () => Navigator.pushNamed(context, '/emergency-sos'),
-              ),
-              SizedBox(height: 24),
-
-              // Recent Safety Alerts
-              Text(
-                'Recent Safety Alerts',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              SizedBox(height: 16),
-              _buildRecentAlerts(),
-              SizedBox(height: 24),
-
-              // Quick Actions
-              Text(
-                'Quick Actions',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-              SizedBox(height: 16),
-              _buildQuickActions(),
-            ],
-          ),
-        ),
+            ),
+        ],
       ),
       bottomNavigationBar: CustomBottomNavigation(
         currentIndex: _currentIndex,
         onTap: _onBottomNavTap,
+        onEmergencyTap: _showEmergencyTypeSelector,
       ),
     );
   }
@@ -273,7 +299,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: () => Navigator.pushNamed(context, '/safety-reporting'),
           ),
         ),
-       SizedBox(width: 12),
+        SizedBox(width: 12),
         Expanded(
           child: _buildQuickActionCard(
             icon: Icons.notifications,
@@ -359,7 +385,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshData() async {
-    // Simulated data refresh
+    // Simulate data refresh
     await Future.delayed(Duration(seconds: 1));
     setState(() {
       _safetyLevel = [
@@ -371,7 +397,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _shareLocation() {
-    // Need to still implement location sharing functionality
+    // Implement location sharing functionality
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -411,15 +437,59 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.pushNamed(context, '/route-planning');
         break;
       case 2:
-        Navigator.pushNamed(context, '/safety-reporting');
-        break;
-      case 3:
         Navigator.pushNamed(context, '/safety-alerts');
         break;
-      case 4:
+      case 3:
         Navigator.pushNamed(context, '/profile-settings');
         break;
     }
   }
-}
 
+  void _showEmergencyTypeSelector() {
+    setState(() {
+      _showEmergencySelector = true;
+    });
+  }
+
+  void _hideEmergencySelector() {
+    setState(() {
+      _showEmergencySelector = false;
+    });
+  }
+
+  void _handleEmergencySelected(String emergencyType) {
+    _hideEmergencySelector();
+
+    // Handle the selected emergency type
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Emergency Alert'),
+        content: Text(
+          'You selected: ${emergencyType.toUpperCase()}\n\nInitiating emergency protocol...',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.alertRed,
+            ),
+            onPressed: () {
+              Navigator.pop(context);
+              // Navigate to emergency handling screen or call emergency services
+              Navigator.pushNamed(
+                context,
+                '/emergency-sos',
+                arguments: emergencyType,
+              );
+            },
+            child: Text('Continue'),
+          ),
+        ],
+      ),
+    );
+  }
+}
