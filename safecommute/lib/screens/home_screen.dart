@@ -1,10 +1,10 @@
 // screens/home_screen.dart
 import 'package:flutter/material.dart';
-import '../../utils/app_colors.dart';
-import '../../widgets/custom_bottom_navigation.dart';
-import '../../widgets/safety_status_widget.dart';
-import '../../widgets/emergency_button.dart';
-import '../../widgets/emergency_type_selector.dart';
+import '../utils/app_colors.dart';
+import '../widgets/custom_bottom_navigation.dart';
+import '../widgets/safety_status_widget.dart';
+import '../widgets/emergency_button.dart';
+import '../widgets/emergency_type_selector.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -26,11 +26,16 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Row(
           children: [
-            Image.asset(
-              'assets/images/logo.png',
-              height: 28,
+            Container(
               width: 28,
-              errorBuilder: (context, error, stackTrace) => Icon(Icons.shield),
+              height: 28,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [AppColors.primarySafetyGreen, AppColors.primaryBlue],
+                ),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.shield, color: Colors.white, size: 16),
             ),
             SizedBox(width: 8),
             Text('SafeCommute'),
@@ -296,7 +301,7 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.report_problem,
             title: 'Report\nIncident',
             color: AppColors.warningAmber,
-            onTap: () => Navigator.pushNamed(context, '/safety-reporting'),
+            onTap: () => _showEmergencyTypeSelector(),
           ),
         ),
         SizedBox(width: 12),
@@ -437,7 +442,7 @@ class _HomeScreenState extends State<HomeScreen> {
         Navigator.pushNamed(context, '/route-planning');
         break;
       case 2:
-        Navigator.pushNamed(context, '/safety-alerts');
+        Navigator.pushNamed(context, '/stations');
         break;
       case 3:
         Navigator.pushNamed(context, '/profile-settings');
@@ -460,36 +465,11 @@ class _HomeScreenState extends State<HomeScreen> {
   void _handleEmergencySelected(String emergencyType) {
     _hideEmergencySelector();
 
-    // Handle the selected emergency type
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Emergency Alert'),
-        content: Text(
-          'You selected: ${emergencyType.toUpperCase()}\n\nInitiating emergency protocol...',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.alertRed,
-            ),
-            onPressed: () {
-              Navigator.pop(context);
-              // Navigate to emergency handling screen or call emergency services
-              Navigator.pushNamed(
-                context,
-                '/emergency-sos',
-                arguments: emergencyType,
-              );
-            },
-            child: Text('Continue'),
-          ),
-        ],
-      ),
+    // Navigate directly to safety reporting screen with pre-selected type
+    Navigator.pushNamed(
+      context,
+      '/safety-reporting',
+      arguments: {'incidentType': emergencyType},
     );
   }
 }

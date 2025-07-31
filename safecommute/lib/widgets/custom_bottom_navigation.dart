@@ -51,8 +51,8 @@ class CustomBottomNavigation extends StatelessWidget {
               // Empty space for center button
               SizedBox(width: 60),
               _buildNavItem(
-                icon: Icons.notifications,
-                label: 'Alerts',
+                icon: Icons.train,
+                label: 'Stations',
                 index: 2,
                 isSelected: currentIndex == 2,
                 onTap: () => onTap(2),
