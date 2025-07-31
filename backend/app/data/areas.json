@@ -1,0 +1,366 @@
+[
+    {
+        "id": "jhb_central",
+        "name": "JHB Central",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "red"
+    },
+    {
+        "id": "krugersdorp",
+        "name": "Krugersdorp",
+        "district": "West Rand District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "sophia_town",
+        "name": "Sophia Town",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "sunnyside",
+        "name": "Sunnyside",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "tembisa",
+        "name": "Tembisa",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "germiston",
+        "name": "Germiston",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "mamelodi_east",
+        "name": "Mamelodi East",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "vanderbijlpark",
+        "name": "Vanderbijlpark",
+        "district": "Sedibeng District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "evaton",
+        "name": "Evaton",
+        "district": "Sedibeng District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "vosloorus",
+        "name": "Vosloorus",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "orange_farms",
+        "name": "Orange Farms",
+        "district": "Sedibeng District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "ivory_park",
+        "name": "Ivory Park",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "tsakane",
+        "name": "Tsakane",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "dobsonville",
+        "name": "Dobsonville",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "temba",
+        "name": "Temba",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "yellow"
+    },
+    {
+        "id": "eldorado_park",
+        "name": "Eldorado Park",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "protea_glen",
+        "name": "Protea Glen",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "katlehong",
+        "name": "Katlehong",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "soshanguve",
+        "name": "Soshanguve",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "bekkersdal",
+        "name": "Bekkersdal",
+        "district": "West Rand District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "tshwane_central",
+        "name": "Tshwane Central",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "kempton_park",
+        "name": "Kempton Park",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "sebokeng",
+        "name": "Sebokeng",
+        "district": "Sedibeng District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "pretoria_west",
+        "name": "Pretoria West",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "akasia",
+        "name": "Akasia",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "loate",
+        "name": "Loate",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "diepsloot",
+        "name": "Diepsloot",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "lyttelton",
+        "name": "Lyttelton",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "springs",
+        "name": "Springs",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "randfontein",
+        "name": "Randfontein",
+        "district": "West Rand District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "carletonville",
+        "name": "Carletonville",
+        "district": "West Rand District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "garsfontein",
+        "name": "Garsfontein",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "booysens",
+        "name": "Booysens",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "atlantis",
+        "name": "Atlantis",
+        "district": "City of Tshwane",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "yeoville",
+        "name": "Yeoville",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "soweto_gautrain",
+        "name": "Soweto Gautrain",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "heidelberg",
+        "name": "Heidelberg",
+        "district": "Sedibeng District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "pretoria_moot",
+        "name": "Pretoria Moot",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "tembisa_south",
+        "name": "Tembisa South",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "sandton",
+        "name": "Sandton",
+        "district": "Johannesburg District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "pretoria_north",
+        "name": "Pretoria North",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "brakpan",
+        "name": "Brakpan",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "duduza",
+        "name": "Duduza",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "bronkhorstspruit",
+        "name": "Bronkhorstspruit",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "mabopane",
+        "name": "Mabopane",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "thabazimbi",
+        "name": "Thabazimbi",
+        "district": "Waterberg District",
+        "province": "Limpopo",
+        "safety_level": "green"
+    },
+    {
+        "id": "williams_road",
+        "name": "Williams Road",
+        "district": "Ekurhuleni District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "pretoria_gardens",
+        "name": "Pretoria Gardens",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "hammanskraal",
+        "name": "Hammanskraal",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "pretoria_central",
+        "name": "Pretoria Central",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "soshanguve_south",
+        "name": "Soshanguve South",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    },
+    {
+        "id": "pretoria_east",
+        "name": "Pretoria East",
+        "district": "Tshwane District",
+        "province": "Gauteng",
+        "safety_level": "green"
+    }
+]

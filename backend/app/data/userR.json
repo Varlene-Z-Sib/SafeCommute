@@ -1,0 +1,62 @@
+  [
+    {
+      "id": "jhb_central",
+      "user": null,
+      "safety_level": 1,
+      "comment": "It's generally safe during the day, especially in busy areas. Just gotta be aware of your surroundings."
+    },
+    {
+      "id": "krugersdorp",
+      "user": null,
+      "safety_level": 2,
+      "comment": "There are some quiet spots, and it's not bad if you stick to the main roads. Could be better at night though."
+    },
+    {
+      "id": "sophia_town",
+      "user": null,
+      "safety_level": 2,
+      "comment": "It's improved a lot, but you still need to be cautious, especially after dark. Familiarity helps here."
+    },
+    {
+      "id": "sunnyside",
+      "user": null,
+      "safety_level": 2,
+      "comment": "It's bustling, but there are definitely areas you want to avoid, particularly if you're alone."
+    },
+    {
+      "id": "tembisa",
+      "user": null,
+      "safety_level": 2,
+      "comment": "It's lively and generally okay, but like any big township, it has its challenges and certain spots can be risky."
+    },
+    {
+      "id": "jhb_central",
+      "user": null,
+      "safety_level": 3,
+      "comment": "While some parts are fine, overall it can be quite dodgy, especially outside of business hours. Need to be constantly vigilant."
+    },
+    {
+      "id": "krugersdorp",
+      "user": null,
+      "safety_level": 1,
+      "comment": "I found it surprisingly safe, especially the residential areas and main shopping centers. Felt comfortable walking around."
+    },
+    {
+      "id": "eldorado_park",
+      "user": null,
+      "safety_level": 3,
+      "comment": "I've heard too many stories and personally feel uneasy there, especially at night. It's best to be extremely careful."
+    },
+    {
+      "id": "protea_glen",
+      "user": null,
+      "safety_level": 2,
+      "comment": "It's developing, but there are still concerns, particularly with petty crime. Be aware, but it's not the worst."
+    },
+    {
+      "id": "tembisa",
+      "user": null,
+      "safety_level": 1,
+      "comment": "I'm local, and if you know your way around and stick to safe zones, it's actually quite welcoming and secure in those areas."
+    }
+  ]
