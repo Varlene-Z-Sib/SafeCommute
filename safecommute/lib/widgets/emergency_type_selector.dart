@@ -178,7 +178,7 @@ class _EmergencyTypeSelectorState extends State<EmergencyTypeSelector>
         child: SlideTransition(
           position: _slideAnimation,
           child: Container(
-            height: screenHeight * (isTablet ? 0.7 : 0.8),
+            height: screenHeight * 0.75,
             width: double.infinity,
             child: Column(
               children: [
@@ -257,24 +257,82 @@ class _EmergencyTypeSelectorState extends State<EmergencyTypeSelector>
   }
 
   Widget _buildEmergencyGrid(bool isTablet) {
-    final crossAxisCount = isTablet ? 3 : 2;
-    final childAspectRatio = isTablet ? 1.0 : 0.85;
+    return SingleChildScrollView(
+      physics: BouncingScrollPhysics(),
+      child: Container(
+        padding: EdgeInsets.symmetric(horizontal: 32),
+        child: Column(
+          children: [
+            SizedBox(height: 20),
 
-    return Container(
-      padding: EdgeInsets.symmetric(horizontal: 24),
-      child: GridView.builder(
-        physics: BouncingScrollPhysics(),
-        gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
-          crossAxisCount: crossAxisCount,
-          crossAxisSpacing: 16,
-          mainAxisSpacing: 16,
-          childAspectRatio: childAspectRatio,
+            // First row - 2 items
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildEmergencyButton(_emergencyTypes[0], 0), // Theft
+                _buildEmergencyButton(_emergencyTypes[10], 10), // Poor Lighting
+              ],
+            ),
+            SizedBox(height: 25),
+
+            // Second row - 3 items
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildEmergencyButton(_emergencyTypes[6], 6), // Accident
+                _buildEmergencyButton(_emergencyTypes[2], 2), // Violence
+                _buildEmergencyButton(_emergencyTypes[9], 9), // Drug Activity
+              ],
+            ),
+            SizedBox(height: 25),
+
+            // Third row - 2 items
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildEmergencyButton(_emergencyTypes[7], 7), // Safety Hazard
+                _buildEmergencyButton(_emergencyTypes[11], 11), // Other
+              ],
+            ),
+            SizedBox(height: 25),
+
+            // Fourth row - 3 compact items
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildCompactEmergencyButton(
+                  _emergencyTypes[1],
+                  1,
+                ), // Harassment
+                _buildCompactEmergencyButton(
+                  _emergencyTypes[3],
+                  3,
+                ), // Suspicious Activity
+                _buildCompactEmergencyButton(
+                  _emergencyTypes[4],
+                  4,
+                ), // Overcrowding
+              ],
+            ),
+            SizedBox(height: 20),
+
+            // Fifth row - 2 compact items
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                _buildCompactEmergencyButton(
+                  _emergencyTypes[5],
+                  5,
+                ), // Transport Delay
+                _buildCompactEmergencyButton(
+                  _emergencyTypes[8],
+                  8,
+                ), // Vandalism
+              ],
+            ),
+            SizedBox(height: 30),
+          ],
         ),
-        itemCount: _emergencyTypes.length,
-        itemBuilder: (context, index) {
-          final emergency = _emergencyTypes[index];
-          return _buildEmergencyButton(emergency, index);
-        },
       ),
     );
   }
@@ -288,109 +346,126 @@ class _EmergencyTypeSelectorState extends State<EmergencyTypeSelector>
       tween: Tween(begin: 0.0, end: 1.0),
       builder: (context, animation, child) {
         return Transform.scale(
-          scale: animation * (isSelected ? 0.95 : 1.0),
-          child: Material(
-            color: Colors.transparent,
-            child: InkWell(
-              onTap: isSelecting ? null : () => _selectEmergencyType(emergency),
-              onTapDown: (_) => _onTapDown(emergency['id']),
-              borderRadius: BorderRadius.circular(20),
-              splashColor: emergency['color'].withOpacity(0.3),
-              highlightColor: emergency['color'].withOpacity(0.1),
-              child: AnimatedContainer(
-                duration: Duration(milliseconds: 200),
-                decoration: BoxDecoration(
-                  color: isSelected
-                      ? emergency['color'].withOpacity(0.15)
-                      : Colors.white.withOpacity(0.9),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: isSelected ? emergency['color'] : Colors.transparent,
-                    width: 2,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.1),
-                      blurRadius: isSelected ? 12 : 8,
-                      offset: Offset(0, isSelected ? 6 : 4),
+          scale: animation,
+          child: GestureDetector(
+            onTap: isSelecting
+                ? null
+                : () => _selectEmergencyTypeAndNavigate(emergency),
+            onTapDown: (_) => _onTapDown(emergency['id']),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: Duration(milliseconds: 200),
+                  width: 70,
+                  height: 70,
+                  decoration: BoxDecoration(
+                    color: isSelected ? emergency['color'] : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected ? emergency['color'] : Colors.white,
+                      width: 3,
                     ),
-                  ],
-                ),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    // Severity indicator
-                    if (emergency['severity'] == 'critical') ...[
-                      Container(
-                        padding: EdgeInsets.symmetric(
-                          horizontal: 6,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.alertRed,
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Text(
-                          'URGENT',
-                          style: TextStyle(
-                            color: Colors.white,
-                            fontSize: 8,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.2),
+                        blurRadius: 8,
+                        offset: Offset(0, 4),
                       ),
-                      SizedBox(height: 4),
                     ],
-
-                    // Icon with animated container
-                    AnimatedContainer(
-                      duration: Duration(milliseconds: 200),
-                      width: 48,
-                      height: 48,
-                      decoration: BoxDecoration(
-                        color: emergency['color'].withOpacity(0.1),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        emergency['icon'],
-                        color: emergency['color'],
-                        size: 24,
-                      ),
-                    ),
-
-                    SizedBox(height: 8),
-
-                    // Label
-                    Text(
-                      emergency['label'],
-                      style: TextStyle(
-                        color: isSelected ? emergency['color'] : Colors.black87,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w600,
-                      ),
-                      textAlign: TextAlign.center,
-                    ),
-
-                    SizedBox(height: 2),
-
-                    // Description
-                    Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 6),
-                      child: Text(
-                        emergency['description'],
-                        style: TextStyle(
-                          color: Colors.black54,
-                          fontSize: 10,
-                          height: 1.2,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
+                  ),
+                  child: Icon(
+                    emergency['icon'],
+                    color: isSelected ? Colors.white : emergency['color'],
+                    size: 28,
+                  ),
                 ),
-              ),
+                SizedBox(height: 8),
+                Container(
+                  width: 80,
+                  child: Text(
+                    emergency['label'],
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // Compact version for secondary items
+  Widget _buildCompactEmergencyButton(
+    Map<String, dynamic> emergency,
+    int index,
+  ) {
+    final isSelected = _selectedType == emergency['id'];
+    final isSelecting = _isSelecting;
+
+    return TweenAnimationBuilder<double>(
+      duration: Duration(milliseconds: 200 + (index * 30)),
+      tween: Tween(begin: 0.0, end: 1.0),
+      builder: (context, animation, child) {
+        return Transform.scale(
+          scale: animation,
+          child: GestureDetector(
+            onTap: isSelecting
+                ? null
+                : () => _selectEmergencyTypeAndNavigate(emergency),
+            onTapDown: (_) => _onTapDown(emergency['id']),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                AnimatedContainer(
+                  duration: Duration(milliseconds: 200),
+                  width: 55,
+                  height: 55,
+                  decoration: BoxDecoration(
+                    color: isSelected ? emergency['color'] : Colors.white,
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: isSelected ? emergency['color'] : Colors.white,
+                      width: 2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(0.15),
+                        blurRadius: 6,
+                        offset: Offset(0, 3),
+                      ),
+                    ],
+                  ),
+                  child: Icon(
+                    emergency['icon'],
+                    color: isSelected ? Colors.white : emergency['color'],
+                    size: 22,
+                  ),
+                ),
+                SizedBox(height: 6),
+                Container(
+                  width: 70,
+                  child: Text(
+                    emergency['label'],
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    textAlign: TextAlign.center,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
             ),
           ),
         );
@@ -400,82 +475,28 @@ class _EmergencyTypeSelectorState extends State<EmergencyTypeSelector>
 
   Widget _buildBottomSection(double safeAreaBottom) {
     return Container(
-      padding: EdgeInsets.fromLTRB(24, 16, 24, 16 + safeAreaBottom),
+      padding: EdgeInsets.fromLTRB(24, 8, 24, 16 + safeAreaBottom),
       child: Column(
         children: [
-          // Selected type confirmation
-          if (_selectedType != null) ...[
-            AnimatedContainer(
-              duration: Duration(milliseconds: 300),
-              padding: EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.white.withOpacity(0.3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.check_circle,
-                    color: AppColors.primarySafetyGreen,
-                    size: 20,
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Selected: ${_getEmergencyLabel(_selectedType!)}',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+          // Cancel button only
+          SizedBox(
+            width: double.infinity,
+            height: 48,
+            child: _buildActionButton(
+              onTap: _handleCancel,
+              icon: Icons.close,
+              label: 'Cancel',
+              backgroundColor: Colors.white.withOpacity(0.2),
+              textColor: Colors.white,
+              borderColor: Colors.white.withOpacity(0.3),
             ),
-            SizedBox(height: 16),
-          ],
-
-          // Action buttons
-          Row(
-            children: [
-              // Cancel button
-              Expanded(
-                flex: 2,
-                child: _buildActionButton(
-                  onTap: _handleCancel,
-                  icon: Icons.close,
-                  label: 'Cancel',
-                  backgroundColor: Colors.white.withOpacity(0.2),
-                  textColor: Colors.white,
-                  borderColor: Colors.white.withOpacity(0.3),
-                ),
-              ),
-
-              SizedBox(width: 16),
-
-              // Continue button (changed from "Confirm Emergency")
-              Expanded(
-                flex: 3,
-                child: _buildActionButton(
-                  onTap: _selectedType != null ? _handleContinue : null,
-                  icon: Icons.arrow_forward,
-                  label: 'Continue Report',
-                  backgroundColor: _selectedType != null
-                      ? AppColors.primaryBlue
-                      : Colors.grey.withOpacity(0.5),
-                  textColor: Colors.white,
-                  isLoading: _isSelecting,
-                ),
-              ),
-            ],
           ),
 
-          SizedBox(height: 12),
+          SizedBox(height: 8),
 
           // Info text
           Text(
-            'You\'ll provide more details on the next screen',
+            'Tap any incident type to start reporting',
             style: TextStyle(color: Colors.white60, fontSize: 12),
             textAlign: TextAlign.center,
           ),
@@ -551,6 +572,22 @@ class _EmergencyTypeSelectorState extends State<EmergencyTypeSelector>
 
   void _onTapDown(String emergencyId) {
     HapticFeedback.selectionClick();
+  }
+
+  void _selectEmergencyTypeAndNavigate(Map<String, dynamic> emergency) async {
+    setState(() {
+      _selectedType = emergency['id'];
+      _isSelecting = true;
+    });
+
+    HapticFeedback.mediumImpact();
+
+    // Brief delay for visual feedback
+    await Future.delayed(Duration(milliseconds: 200));
+
+    // Close the selector and navigate immediately
+    await _slideController.reverse();
+    widget.onEmergencySelected(_selectedType!);
   }
 
   void _selectEmergencyType(Map<String, dynamic> emergency) {

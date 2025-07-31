@@ -32,50 +32,84 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
   bool _isSubmitting = false;
   File? _selectedImage;
 
-  // Incident types based on SafetyReport domain class
+  // SafeCommute-specific incident types (matching the selector)
   final List<Map<String, dynamic>> _incidentTypes = [
     {
       'id': 'theft',
       'label': 'Theft',
       'icon': Icons.money_off,
-      'description': 'Robbery, pickpocketing, or theft of belongings',
+      'description': 'Robbery, pickpocketing, stolen belongings',
       'color': AppColors.alertRed,
     },
     {
       'id': 'harassment',
       'label': 'Harassment',
       'icon': Icons.person_off,
-      'description': 'Verbal abuse, inappropriate behavior, or intimidation',
+      'description': 'Verbal abuse, intimidation, inappropriate behavior',
       'color': AppColors.warningAmber,
     },
     {
       'id': 'assault',
-      'label': 'Assault',
+      'label': 'Violence',
       'icon': Icons.local_hospital,
-      'description': 'Physical violence or assault',
+      'description': 'Physical assault or violence',
       'color': AppColors.alertRed,
-    },
-    {
-      'id': 'vandalism',
-      'label': 'Vandalism',
-      'icon': Icons.broken_image,
-      'description': 'Property damage or vandalism',
-      'color': AppColors.warningAmber,
     },
     {
       'id': 'suspicious_activity',
       'label': 'Suspicious Activity',
       'icon': Icons.visibility,
-      'description': 'Unusual or concerning behavior',
+      'description': 'Suspicious people or unusual activity',
+      'color': AppColors.warningAmber,
+    },
+    {
+      'id': 'overcrowding',
+      'label': 'Overcrowding',
+      'icon': Icons.people,
+      'description': 'Dangerous overcrowding on transport',
       'color': AppColors.primaryBlue,
+    },
+    {
+      'id': 'transport_delay',
+      'label': 'Transport Delays',
+      'icon': Icons.schedule,
+      'description': 'Major transport delays or cancellations',
+      'color': AppColors.warningAmber,
+    },
+    {
+      'id': 'accident',
+      'label': 'Accident',
+      'icon': Icons.car_crash,
+      'description': 'Traffic accident affecting transport',
+      'color': AppColors.alertRed,
     },
     {
       'id': 'safety_hazard',
       'label': 'Safety Hazard',
       'icon': Icons.warning,
-      'description':
-          'Infrastructure issues, broken lighting, unsafe conditions',
+      'description': 'Broken lights, unsafe conditions, infrastructure issues',
       'color': AppColors.warningAmber,
+    },
+    {
+      'id': 'vandalism',
+      'label': 'Vandalism',
+      'icon': Icons.broken_image,
+      'description': 'Property damage, graffiti, broken facilities',
+      'color': AppColors.primaryBlue,
+    },
+    {
+      'id': 'drug_activity',
+      'label': 'Drug Activity',
+      'icon': Icons.local_pharmacy,
+      'description': 'Drug dealing or substance abuse',
+      'color': AppColors.alertRed,
+    },
+    {
+      'id': 'poor_lighting',
+      'label': 'Poor Lighting',
+      'icon': Icons.lightbulb_outline,
+      'description': 'Broken or inadequate lighting creating unsafe conditions',
+      'color': AppColors.primaryBlue,
     },
     {
       'id': 'other',
@@ -94,6 +128,44 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
       vsync: this,
     );
     _locationController.text = _currentLocation;
+
+    // Pre-select incident type if provided
+    if (widget.preSelectedIncidentType != null) {
+      _selectedIncidentType = widget.preSelectedIncidentType!;
+
+      // Auto-set severity based on incident type
+      final selectedIncident = _incidentTypes.firstWhere(
+        (incident) => incident['id'] == widget.preSelectedIncidentType,
+        orElse: () => {'id': ''},
+      );
+
+      if (selectedIncident['id'] != '') {
+        // Set severity based on incident type severity mapping
+        switch (widget.preSelectedIncidentType) {
+          case 'theft':
+          case 'assault':
+          case 'drug_activity':
+            _selectedSeverity = 'critical';
+            break;
+          case 'harassment':
+          case 'accident':
+            _selectedSeverity = 'high';
+            break;
+          case 'suspicious_activity':
+          case 'overcrowding':
+          case 'safety_hazard':
+          case 'poor_lighting':
+            _selectedSeverity = 'medium';
+            break;
+          case 'transport_delay':
+          case 'vandalism':
+            _selectedSeverity = 'low';
+            break;
+          default:
+            _selectedSeverity = 'medium';
+        }
+      }
+    }
   }
 
   @override
@@ -131,6 +203,9 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // Show pre-selected type banner if applicable
+              if (widget.preSelectedIncidentType != null)
+                _buildPreSelectedBanner(),
               _buildEmergencyBanner(),
               SizedBox(height: 24),
               _buildIncidentTypeSelection(),
@@ -153,6 +228,104 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildPreSelectedBanner() {
+    final selectedIncident = _incidentTypes.firstWhere(
+      (incident) => incident['id'] == widget.preSelectedIncidentType,
+      orElse: () => {
+        'label': 'Unknown',
+        'icon': Icons.help,
+        'color': Colors.grey,
+      },
+    );
+
+    return Container(
+      margin: EdgeInsets.only(bottom: 16),
+      padding: EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppColors.primarySafetyGreen.withOpacity(0.1),
+            AppColors.primaryBlue.withOpacity(0.1),
+          ],
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: AppColors.primarySafetyGreen.withOpacity(0.3),
+        ),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: selectedIncident['color'].withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              selectedIncident['icon'],
+              color: selectedIncident['color'],
+              size: 24,
+            ),
+          ),
+          SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(
+                      Icons.check_circle,
+                      color: AppColors.primarySafetyGreen,
+                      size: 16,
+                    ),
+                    SizedBox(width: 4),
+                    Text(
+                      'Incident Type Selected',
+                      style: TextStyle(
+                        color: AppColors.primarySafetyGreen,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+                SizedBox(height: 4),
+                Text(
+                  selectedIncident['label'],
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 16,
+                    color: AppColors.textDark,
+                  ),
+                ),
+                SizedBox(height: 2),
+                Text(
+                  'Continue filling out the details below',
+                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: () {
+              setState(() {
+                _selectedIncidentType = '';
+              });
+            },
+            child: Text(
+              'Change',
+              style: TextStyle(
+                color: AppColors.primaryBlue,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -204,16 +377,26 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
   }
 
   Widget _buildIncidentTypeSelection() {
+    // If incident type is pre-selected, show a compact version
+    if (widget.preSelectedIncidentType != null &&
+        _selectedIncidentType == widget.preSelectedIncidentType) {
+      return SizedBox.shrink(); // Hide the full selection since it's shown in banner
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(
-          'What happened?',
+          widget.preSelectedIncidentType != null
+              ? 'Change Incident Type?'
+              : 'What happened?',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         SizedBox(height: 8),
         Text(
-          'Select the type of incident you want to report',
+          widget.preSelectedIncidentType != null
+              ? 'Your incident type has been pre-selected, but you can change it here if needed'
+              : 'Select the type of incident you want to report',
           style: Theme.of(
             context,
           ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
@@ -245,6 +428,30 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
       onTap: () {
         setState(() {
           _selectedIncidentType = incident['id'];
+          // Update severity when incident type changes
+          switch (incident['id']) {
+            case 'theft':
+            case 'assault':
+            case 'drug_activity':
+              _selectedSeverity = 'critical';
+              break;
+            case 'harassment':
+            case 'accident':
+              _selectedSeverity = 'high';
+              break;
+            case 'suspicious_activity':
+            case 'overcrowding':
+            case 'safety_hazard':
+            case 'poor_lighting':
+              _selectedSeverity = 'medium';
+              break;
+            case 'transport_delay':
+            case 'vandalism':
+              _selectedSeverity = 'low';
+              break;
+            default:
+              _selectedSeverity = 'medium';
+          }
         });
         HapticFeedback.selectionClick();
       },
