@@ -13,3 +13,6 @@ app.add_middleware(
 )
 
 app.include_router(stations.router)
+@app.get("/hello")
+async def hello():
+    return {"message": "Hello from FastAPI!"}
