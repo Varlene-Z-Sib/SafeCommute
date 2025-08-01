@@ -6,8 +6,9 @@ import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';
 import 'screens/route_planning_screen.dart';
 import 'screens/live_navigation_screen.dart';
-// import 'screens/safety_reporting_screen.dart';
-// import 'screens/safety_alerts_screen.dart';
+import 'screens/safety_reporting_screen.dart';
+import 'screens/safety_alerts_screen.dart';
+import 'screens/stations_screen.dart';
 import 'screens/emergency_sos_screen.dart';
 import 'screens/profile_settings_screen.dart';
 
@@ -17,7 +18,7 @@ import 'api_service.dart';
 
 void main() {
   // Toggle between test mode and full app mode
-  bool testBackend = true;
+  bool testBackend = false;
 
   runApp(MaterialApp(
     debugShowCheckedModeBanner: false,
@@ -35,18 +36,37 @@ class SafeCommuteApp extends StatelessWidget {
       theme: AppTheme.lightTheme,
       darkTheme: AppTheme.darkTheme,
       themeMode: ThemeMode.system,
-      initialRoute: '/auth',
-      routes: {
-        '/auth': (context) => AuthScreen(),
-        '/home': (context) => HomeScreen(),
-        // '/route-planning': (context) => RoutePlanningScreen(),
-        // '/live-navigation': (context) => LiveNavigationScreen(),
-        // '/safety-reporting': (context) => SafetyReportingScreen(),
-        // '/safety-alerts': (context) => SafetyAlertsScreen(),
-        '/emergency-sos': (context) => EmergencySosScreen(),
-        '/profile-settings': (context) => ProfileSettingsScreen(),
-        '/test': (context) => BackendTestPage(),
+      home: AuthScreen(),
+      onGenerateRoute: (settings) {
+        switch (settings.name) {
+          case '/auth':
+            return MaterialPageRoute(builder: (_) => AuthScreen());
+          case '/home':
+            return MaterialPageRoute(builder: (_) => HomeScreen());
+          case '/route-planning':
+            return MaterialPageRoute(builder: (_) => RoutePlanningScreen());
+          case '/live-navigation':
+            return MaterialPageRoute(builder: (_) => LiveNavigationScreen());
+          case '/safety-reporting':
+            final args = settings.arguments as Map<String, dynamic>?;
+            return MaterialPageRoute(
+              builder: (_) => SafetyReportingScreen(
+                preSelectedIncidentType: args?['incidentType'],
+              ),
+            );
+          case '/safety-alerts':
+            return MaterialPageRoute(builder: (_) => SafetyAlertsScreen());
+          case '/stations':
+            return MaterialPageRoute(builder: (_) => StationsScreen());
+          case '/emergency-sos':
+            return MaterialPageRoute(builder: (_) => EmergencySosScreen());
+          case '/profile-settings':
+            return MaterialPageRoute(builder: (_) => ProfileSettingsScreen());
+          default:
+            return MaterialPageRoute(builder: (_) => AuthScreen());
+        }
       },
+      debugShowCheckedModeBanner: false,
     );
   }
 }
