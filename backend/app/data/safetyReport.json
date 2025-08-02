@@ -138,5 +138,35 @@
     "status": "Pending",
     "isAnonymous": false,
     "imageUrl": ""
+  },
+  {
+    "id": "inc_1754115570064",
+    "station_id": "bree_rank",
+    "user_id": "user_123",
+    "location_id": "bree_rank",
+    "type": "theft",
+    "description": "Wallet snatched near entrance",
+    "severity": "high",
+    "anonymous": true,
+    "lat": -26.2036,
+    "lng": 28.0405,
+    "resolved": false,
+    "status": "Pending",
+    "timestamp": "2025-08-02T08:19:30.064756"
+  },
+  {
+    "id": "inc_1754142755612",
+    "station_id": "",
+    "user_id": null,
+    "location_id": "",
+    "type": "theft",
+    "description": "good good",
+    "severity": "medium",
+    "anonymous": true,
+    "lat": -26.084974179190887,
+    "lng": 27.877499739062383,
+    "resolved": false,
+    "status": "Pending",
+    "timestamp": "2025-08-02T15:52:35.612845"
   }
 ]

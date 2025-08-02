@@ -1,6 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
+import 'dart:io';
+//rt 'package:image_picker/image_picker.dart';*//
+import 'package:geolocator/geolocator.dart';
+
 
 import 'screens/auth_screen.dart';
 import 'screens/home_screen.dart';

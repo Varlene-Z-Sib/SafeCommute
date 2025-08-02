@@ -1,8 +1,16 @@
 // screens/safety_reporting_screen.dart
+import 'dart:convert';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'dart:io';
+import 'package:geolocator/geolocator.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:http/http.dart' as http;
+
 import '../../utils/app_colors.dart';
+import '../api_service.dart';
 
 class SafetyReportingScreen extends StatefulWidget {
   final String? preSelectedIncidentType;
@@ -18,11 +26,9 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
   final _formKey = GlobalKey<FormState>();
   late AnimationController _submitAnimationController;
 
-  // Form controllers
   final _descriptionController = TextEditingController();
   final _locationController = TextEditingController();
 
-  // Form state based on SafetyReport domain class
   String _selectedIncidentType = '';
   String _selectedSeverity = 'medium';
   DateTime _incidentTime = DateTime.now();
@@ -31,8 +37,10 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
   bool _shareLocation = true;
   bool _isSubmitting = false;
   File? _selectedImage;
+  Position? _currentPosition;
+  String? _stationId;
+  String? _stationName;
 
-  // SafeCommute-specific incident types (matching the selector)
   final List<Map<String, dynamic>> _incidentTypes = [
     {
       'id': 'theft',
@@ -129,41 +137,44 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
     );
     _locationController.text = _currentLocation;
 
-    // Pre-select incident type if provided
     if (widget.preSelectedIncidentType != null) {
       _selectedIncidentType = widget.preSelectedIncidentType!;
+      switch (widget.preSelectedIncidentType) {
+        case 'theft':
+        case 'assault':
+        case 'drug_activity':
+          _selectedSeverity = 'critical';
+          break;
+        case 'harassment':
+        case 'accident':
+          _selectedSeverity = 'high';
+          break;
+        case 'suspicious_activity':
+        case 'overcrowding':
+        case 'safety_hazard':
+        case 'poor_lighting':
+          _selectedSeverity = 'medium';
+          break;
+        case 'transport_delay':
+        case 'vandalism':
+          _selectedSeverity = 'low';
+          break;
+        default:
+          _selectedSeverity = 'medium';
+      }
+    }
+  }
 
-      // Auto-set severity based on incident type
-      final selectedIncident = _incidentTypes.firstWhere(
-        (incident) => incident['id'] == widget.preSelectedIncidentType,
-        orElse: () => {'id': ''},
-      );
-
-      if (selectedIncident['id'] != '') {
-        // Set severity based on incident type severity mapping
-        switch (widget.preSelectedIncidentType) {
-          case 'theft':
-          case 'assault':
-          case 'drug_activity':
-            _selectedSeverity = 'critical';
-            break;
-          case 'harassment':
-          case 'accident':
-            _selectedSeverity = 'high';
-            break;
-          case 'suspicious_activity':
-          case 'overcrowding':
-          case 'safety_hazard':
-          case 'poor_lighting':
-            _selectedSeverity = 'medium';
-            break;
-          case 'transport_delay':
-          case 'vandalism':
-            _selectedSeverity = 'low';
-            break;
-          default:
-            _selectedSeverity = 'medium';
-        }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    if (args != null) {
+      if (args.containsKey('stationId')) {
+        _stationId = args['stationId'] as String?;
+      }
+      if (args.containsKey('stationName')) {
+        _stationName = args['stationName'] as String?;
       }
     }
   }
@@ -176,58 +187,220 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Report Safety Incident'),
-        actions: [
-          TextButton(
-            onPressed: _selectedIncidentType.isNotEmpty ? _submitReport : null,
-            child: Text(
-              'SUBMIT',
-              style: TextStyle(
-                fontWeight: FontWeight.bold,
-                color: _selectedIncidentType.isNotEmpty
-                    ? AppColors.primaryBlue
-                    : Colors.grey,
-              ),
-            ),
-          ),
-        ],
+  Future<void> _ensureLocationPermission() async {
+    final status = await Permission.location.status;
+    if (status.isDenied || status.isRestricted) {
+      await Permission.location.request();
+    }
+  }
+
+  Future<void> _getCurrentPosition() async {
+    try {
+      await _ensureLocationPermission();
+      bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      if (!serviceEnabled) return;
+      LocationPermission permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        permission = await Geolocator.requestPermission();
+        if (permission == LocationPermission.denied || permission == LocationPermission.deniedForever) return;
+      }
+      _currentPosition = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
+    } catch (_) {
+      // ignore location errors
+    }
+  }
+
+  Future<void> _submitReport() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    if (_selectedIncidentType.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Select an incident type')));
+      return;
+    }
+
+    setState(() {
+      _isSubmitting = true;
+    });
+
+    await _getCurrentPosition();
+
+    final description = _descriptionController.text.trim();
+    final severity = _selectedSeverity;
+    final anonymous = _isAnonymous;
+    final stationId = _stationId ?? '';
+    final type = _selectedIncidentType;
+    final lat = (_shareLocation && _currentPosition != null) ? _currentPosition!.latitude : null;
+    final lng = (_shareLocation && _currentPosition != null) ? _currentPosition!.longitude : null;
+
+    try {
+      Map<String, dynamic> result;
+
+      if (_selectedImage != null) {
+        final uri = Uri.parse('${ApiConfig.baseUrl}/safety-reports/with-image');
+        final request = http.MultipartRequest('POST', uri);
+
+        request.fields['station_id'] = stationId;
+        request.fields['type'] = type;
+        request.fields['description'] = description;
+        request.fields['severity'] = severity;
+        request.fields['anonymous'] = anonymous.toString();
+        if (lat != null) request.fields['lat'] = lat.toString();
+        if (lng != null) request.fields['lng'] = lng.toString();
+        if (_stationName != null) request.fields['location_id'] = _stationName!;
+
+        request.files.add(await http.MultipartFile.fromPath('image', _selectedImage!.path));
+
+        final streamed = await request.send();
+        final response = await http.Response.fromStream(streamed);
+        if (response.statusCode == 200) {
+          result = jsonDecode(response.body);
+        } else {
+          throw Exception('Upload failed: ${response.statusCode} ${response.body}');
+        }
+      } else {
+        final payload = {
+          'station_id': stationId,
+          'type': type,
+          'description': description,
+          'severity': severity,
+          'anonymous': anonymous,
+          if (lat != null) 'lat': lat,
+          if (lng != null) 'lng': lng,
+          if (_stationName != null) 'location_id': _stationName,
+        };
+
+        final response = await http.post(
+          Uri.parse('${ApiConfig.baseUrl}/safety-reports'),
+          headers: {'Content-Type': 'application/json'},
+          body: jsonEncode(payload),
+        );
+        if (response.statusCode == 200) {
+          result = jsonDecode(response.body);
+        } else {
+          throw Exception('Submission failed: ${response.statusCode} ${response.body}');
+        }
+      }
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Report submitted')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Submission failed: $e')),
+      );
+    } finally {
+      setState(() {
+        _isSubmitting = false;
+      });
+    }
+  }
+
+  void _useCurrentLocation() {
+    setState(() {
+      _locationController.text = _currentLocation;
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Using current location'),
+        backgroundColor: AppColors.primarySafetyGreen,
       ),
-      body: Form(
-        key: _formKey,
-        child: SingleChildScrollView(
-          padding: EdgeInsets.all(16),
+    );
+  }
+
+  void _selectImage() {
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => Container(
+        height: 150,
+        child: Column(
+          children: [
+            ListTile(
+              leading: Icon(Icons.camera_alt),
+              title: Text('Take Photo'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _takePhoto();
+              },
+            ),
+            ListTile(
+              leading: Icon(Icons.photo_library),
+              title: Text('Choose from Gallery'),
+              onTap: () async {
+                Navigator.pop(context);
+                await _chooseFromGallery();
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _takePhoto() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.camera, imageQuality: 70);
+    if (picked != null) {
+      setState(() {
+        _selectedImage = File(picked.path);
+      });
+    }
+  }
+
+  Future<void> _chooseFromGallery() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery, imageQuality: 70);
+    if (picked != null) {
+      setState(() {
+        _selectedImage = File(picked.path);
+      });
+    }
+  }
+
+  void _removeImage() {
+    setState(() {
+      _selectedImage = null;
+    });
+  }
+
+  void _showPrivacyInfo() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Privacy & Data Handling'),
+        content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // Show pre-selected type banner if applicable
-              if (widget.preSelectedIncidentType != null)
-                _buildPreSelectedBanner(),
-              _buildEmergencyBanner(),
-              SizedBox(height: 24),
-              _buildIncidentTypeSelection(),
-              SizedBox(height: 24),
-              _buildSeveritySelection(),
-              SizedBox(height: 24),
-              _buildLocationSection(),
-              SizedBox(height: 24),
-              _buildTimeSelection(),
-              SizedBox(height: 24),
-              _buildDescriptionSection(),
-              SizedBox(height: 24),
-              _buildImageSection(),
-              SizedBox(height: 24),
-              _buildPrivacyOptions(),
-              SizedBox(height: 32),
-              _buildSubmitButton(),
+              Text(
+                'How we handle your report:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('• Reports are shared with relevant authorities'),
+              Text('• Location data helps improve safety for everyone'),
+              Text('• Anonymous reports protect your identity'),
+              Text('• Photos are encrypted and stored securely'),
               SizedBox(height: 16),
-              _buildSafetyTips(),
+              Text(
+                'Your safety data helps:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('• Other commuters make informed decisions'),
+              Text('• Authorities allocate resources effectively'),
+              Text('• Improve overall public transport safety'),
             ],
           ),
         ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Got it'),
+          ),
+        ],
       ),
     );
   }
@@ -377,10 +550,9 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
   }
 
   Widget _buildIncidentTypeSelection() {
-    // If incident type is pre-selected, show a compact version
     if (widget.preSelectedIncidentType != null &&
         _selectedIncidentType == widget.preSelectedIncidentType) {
-      return SizedBox.shrink(); // Hide the full selection since it's shown in banner
+      return SizedBox.shrink();
     }
 
     return Column(
@@ -418,97 +590,6 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
           },
         ),
       ],
-    );
-  }
-
-  Widget _buildIncidentTypeCard(Map<String, dynamic> incident) {
-    bool isSelected = _selectedIncidentType == incident['id'];
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedIncidentType = incident['id'];
-          // Update severity when incident type changes
-          switch (incident['id']) {
-            case 'theft':
-            case 'assault':
-            case 'drug_activity':
-              _selectedSeverity = 'critical';
-              break;
-            case 'harassment':
-            case 'accident':
-              _selectedSeverity = 'high';
-              break;
-            case 'suspicious_activity':
-            case 'overcrowding':
-            case 'safety_hazard':
-            case 'poor_lighting':
-              _selectedSeverity = 'medium';
-              break;
-            case 'transport_delay':
-            case 'vandalism':
-              _selectedSeverity = 'low';
-              break;
-            default:
-              _selectedSeverity = 'medium';
-          }
-        });
-        HapticFeedback.selectionClick();
-      },
-      child: Container(
-        padding: EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: isSelected ? incident['color'].withOpacity(0.1) : Colors.white,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: isSelected ? incident['color'] : Colors.grey[300]!,
-            width: isSelected ? 2 : 1,
-          ),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: incident['color'].withOpacity(0.2),
-                    blurRadius: 8,
-                    offset: Offset(0, 4),
-                  ),
-                ]
-              : [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.05),
-                    blurRadius: 4,
-                    offset: Offset(0, 2),
-                  ),
-                ],
-        ),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              incident['icon'],
-              size: 32,
-              color: isSelected ? incident['color'] : Colors.grey[600],
-            ),
-            SizedBox(height: 8),
-            Text(
-              incident['label'],
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 14,
-                color: isSelected ? incident['color'] : Colors.grey[800],
-              ),
-              textAlign: TextAlign.center,
-            ),
-            SizedBox(height: 4),
-            Text(
-              incident['description'],
-              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -561,62 +642,6 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
           ],
         ),
       ],
-    );
-  }
-
-  Widget _buildSeverityOption(
-    String value,
-    String label,
-    String description,
-    Color color,
-  ) {
-    bool isSelected = _selectedSeverity == value;
-
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _selectedSeverity = value;
-        });
-        HapticFeedback.selectionClick();
-      },
-      child: Container(
-        padding: EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: isSelected ? color.withOpacity(0.1) : Colors.white,
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? color : Colors.grey[300]!,
-            width: isSelected ? 2 : 1,
-          ),
-        ),
-        child: Column(
-          children: [
-            Container(
-              width: 24,
-              height: 24,
-              decoration: BoxDecoration(
-                color: isSelected ? color : Colors.grey[400],
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.circle, size: 12, color: Colors.white),
-            ),
-            SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: 12,
-                color: isSelected ? color : Colors.grey[800],
-              ),
-            ),
-            Text(
-              description,
-              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
-              textAlign: TextAlign.center,
-            ),
-          ],
-        ),
-      ),
     );
   }
 
@@ -689,33 +714,6 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
               activeColor: AppColors.primarySafetyGreen,
             ),
           ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTimeSelection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'When did this happen?',
-          style: Theme.of(context).textTheme.headlineMedium,
-        ),
-        SizedBox(height: 16),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.grey[300]!),
-          ),
-          child: ListTile(
-            leading: Icon(Icons.access_time, color: AppColors.primaryBlue),
-            title: Text(_formatDateTime(_incidentTime)),
-            subtitle: Text('Tap to change time'),
-            trailing: Icon(Icons.keyboard_arrow_right),
-            onTap: _selectDateTime,
-          ),
         ),
       ],
     );
@@ -970,6 +968,152 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
     );
   }
 
+  Widget _buildIncidentTypeCard(Map<String, dynamic> incident) {
+    bool isSelected = _selectedIncidentType == incident['id'];
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedIncidentType = incident['id'];
+          switch (incident['id']) {
+            case 'theft':
+            case 'assault':
+            case 'drug_activity':
+              _selectedSeverity = 'critical';
+              break;
+            case 'harassment':
+            case 'accident':
+              _selectedSeverity = 'high';
+              break;
+            case 'suspicious_activity':
+            case 'overcrowding':
+            case 'safety_hazard':
+            case 'poor_lighting':
+              _selectedSeverity = 'medium';
+              break;
+            case 'transport_delay':
+            case 'vandalism':
+              _selectedSeverity = 'low';
+              break;
+            default:
+              _selectedSeverity = 'medium';
+          }
+        });
+        HapticFeedback.selectionClick();
+      },
+      child: Container(
+        padding: EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: isSelected ? incident['color'].withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: isSelected ? incident['color'] : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+          boxShadow: isSelected
+              ? [
+                  BoxShadow(
+                    color: incident['color'].withOpacity(0.2),
+                    blurRadius: 8,
+                    offset: Offset(0, 4),
+                  ),
+                ]
+              : [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.05),
+                    blurRadius: 4,
+                    offset: Offset(0, 2),
+                  ),
+                ],
+        ),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              incident['icon'],
+              size: 32,
+              color: isSelected ? incident['color'] : Colors.grey[600],
+            ),
+            SizedBox(height: 8),
+            Text(
+              incident['label'],
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 14,
+                color: isSelected ? incident['color'] : Colors.grey[800],
+              ),
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 4),
+            Text(
+              incident['description'],
+              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSeverityOption(
+    String value,
+    String label,
+    String description,
+    Color color,
+  ) {
+    bool isSelected = _selectedSeverity == value;
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedSeverity = value;
+        });
+        HapticFeedback.selectionClick();
+      },
+      child: Container(
+        padding: EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.1) : Colors.white,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+            color: isSelected ? color : Colors.grey[300]!,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          children: [
+            Container(
+              width: 24,
+              height: 24,
+              decoration: BoxDecoration(
+                color: isSelected ? color : Colors.grey[400],
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.circle, size: 12, color: Colors.white),
+            ),
+            SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(
+                fontWeight: FontWeight.w600,
+                fontSize: 12,
+                color: isSelected ? color : Colors.grey[800],
+              ),
+            ),
+            Text(
+              description,
+              style: TextStyle(fontSize: 10, color: Colors.grey[600]),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   String _formatDateTime(DateTime dateTime) {
     final now = DateTime.now();
     final difference = now.difference(dateTime);
@@ -983,6 +1127,89 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
     } else {
       return '${dateTime.day}/${dateTime.month}/${dateTime.year} at ${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
     }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Report Safety Incident'),
+        actions: [
+          TextButton(
+            onPressed: _selectedIncidentType.isNotEmpty && !_isSubmitting
+                ? _submitReport
+                : null,
+            child: Text(
+              'SUBMIT',
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                color: _selectedIncidentType.isNotEmpty
+                    ? AppColors.primaryBlue
+                    : Colors.grey,
+              ),
+            ),
+          ),
+        ],
+      ),
+      body: Form(
+        key: _formKey,
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(16),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (widget.preSelectedIncidentType != null) _buildPreSelectedBanner(),
+              _buildEmergencyBanner(),
+              SizedBox(height: 24),
+              _buildIncidentTypeSelection(),
+              SizedBox(height: 24),
+              _buildSeveritySelection(),
+              SizedBox(height: 24),
+              _buildLocationSection(),
+              SizedBox(height: 24),
+              _buildTimeSelection(),
+              SizedBox(height: 24),
+              _buildDescriptionSection(),
+              SizedBox(height: 24),
+              _buildImageSection(),
+              SizedBox(height: 24),
+              _buildPrivacyOptions(),
+              SizedBox(height: 32),
+              _buildSubmitButton(),
+              SizedBox(height: 16),
+              _buildSafetyTips(),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildTimeSelection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'When did this happen?',
+          style: Theme.of(context).textTheme.headlineMedium,
+        ),
+        SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.grey[300]!),
+          ),
+          child: ListTile(
+            leading: Icon(Icons.access_time, color: AppColors.primaryBlue),
+            title: Text(_formatDateTime(_incidentTime)),
+            subtitle: Text('Tap to change time'),
+            trailing: Icon(Icons.keyboard_arrow_right),
+            onTap: _selectDateTime,
+          ),
+        ),
+      ],
+    );
   }
 
   void _selectDateTime() async {
@@ -1011,183 +1238,5 @@ class _SafetyReportingScreenState extends State<SafetyReportingScreen>
         });
       }
     }
-  }
-
-  void _useCurrentLocation() {
-    setState(() {
-      _locationController.text = _currentLocation;
-    });
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Using current location'),
-        backgroundColor: AppColors.primarySafetyGreen,
-      ),
-    );
-  }
-
-  void _selectImage() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        height: 150,
-        child: Column(
-          children: [
-            ListTile(
-              leading: Icon(Icons.camera_alt),
-              title: Text('Take Photo'),
-              onTap: () {
-                Navigator.pop(context);
-                _takePhoto();
-              },
-            ),
-            ListTile(
-              leading: Icon(Icons.photo_library),
-              title: Text('Choose from Gallery'),
-              onTap: () {
-                Navigator.pop(context);
-                _chooseFromGallery();
-              },
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _takePhoto() {
-    // Simulate taking a photo
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Camera functionality not implemented in demo')),
-    );
-  }
-
-  void _chooseFromGallery() {
-    // Simulate choosing from gallery
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Gallery functionality not implemented in demo')),
-    );
-  }
-
-  void _removeImage() {
-    setState(() {
-      _selectedImage = null;
-    });
-  }
-
-  void _showPrivacyInfo() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Privacy & Data Handling'),
-        content: SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                'How we handle your report:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text('• Reports are shared with relevant authorities'),
-              Text('• Location data helps improve safety for everyone'),
-              Text('• Anonymous reports protect your identity'),
-              Text('• Photos are encrypted and stored securely'),
-              SizedBox(height: 16),
-              Text(
-                'Your safety data helps:',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-              SizedBox(height: 8),
-              Text('• Other commuters make informed decisions'),
-              Text('• Authorities allocate resources effectively'),
-              Text('• Improve overall public transport safety'),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Got it'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _submitReport() async {
-    if (!_formKey.currentState!.validate()) {
-      return;
-    }
-
-    setState(() {
-      _isSubmitting = true;
-    });
-
-    _submitAnimationController.forward();
-
-    // Simulate API call
-    await Future.delayed(Duration(seconds: 2));
-
-    setState(() {
-      _isSubmitting = false;
-    });
-
-    // Show success dialog
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (context) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.check_circle, color: AppColors.primarySafetyGreen),
-            SizedBox(width: 8),
-            Text('Report Submitted'),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Thank you for helping keep our community safe.'),
-            SizedBox(height: 16),
-            Container(
-              padding: EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: AppColors.primarySafetyGreen.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Report ID: #SR${DateTime.now().millisecondsSinceEpoch.toString().substring(8)}',
-                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
-                  ),
-                  SizedBox(height: 4),
-                  Text('Status: Under Review', style: TextStyle(fontSize: 12)),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
-            },
-            child: Text('Done'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              Navigator.pushReplacementNamed(context, '/safety-alerts');
-            },
-            child: Text('View Alerts'),
-          ),
-        ],
-      ),
-    );
   }
 }
