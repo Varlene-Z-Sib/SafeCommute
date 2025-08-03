@@ -95,7 +95,7 @@ class CustomBottomNavigation extends StatelessWidget {
                   children: [
                     Icon(Icons.shield, color: Colors.white, size: 28),
                     Text(
-                      'SOS',
+                      'Report',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 10,

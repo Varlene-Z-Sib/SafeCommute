@@ -1,10 +1,12 @@
-// screens/home_screen.dart
 import 'package:flutter/material.dart';
 import '../utils/app_colors.dart';
 import '../widgets/custom_bottom_navigation.dart';
 import '../widgets/safety_status_widget.dart';
 import '../widgets/emergency_button.dart';
 import '../widgets/emergency_type_selector.dart';
+
+// Import the new ChatScreen
+import 'chat_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -35,19 +37,17 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.shield, color: Colors.white, size: 16),
+              child: const Icon(Icons.shield, color: Colors.white, size: 16),
             ),
-            SizedBox(width: 8),
-            Text('SafeCommute'),
+            const SizedBox(width: 8),
+            const Text('SafeCommute'),
           ],
         ),
         actions: [
           Container(
-            padding: EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
             decoration: BoxDecoration(
-              color: _isOnline
-                  ? AppColors.primarySafetyGreen
-                  : AppColors.alertRed,
+              color: _isOnline ? AppColors.primarySafetyGreen : AppColors.alertRed,
               borderRadius: BorderRadius.circular(16),
             ),
             child: Row(
@@ -58,10 +58,10 @@ class _HomeScreenState extends State<HomeScreen> {
                   size: 16,
                   color: Colors.white,
                 ),
-                SizedBox(width: 4),
+                const SizedBox(width: 4),
                 Text(
                   _isOnline ? 'Online' : 'Offline',
-                  style: TextStyle(
+                  style: const TextStyle(
                     color: Colors.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
@@ -70,9 +70,9 @@ class _HomeScreenState extends State<HomeScreen> {
               ],
             ),
           ),
-          SizedBox(width: 8),
+          const SizedBox(width: 8),
           IconButton(
-            icon: Icon(Icons.settings),
+            icon: const Icon(Icons.settings),
             onPressed: () => Navigator.pushNamed(context, '/profile-settings'),
           ),
         ],
@@ -82,20 +82,20 @@ class _HomeScreenState extends State<HomeScreen> {
           RefreshIndicator(
             onRefresh: _refreshData,
             child: SingleChildScrollView(
-              physics: AlwaysScrollableScrollPhysics(),
-              padding: EdgeInsets.all(16),
+              physics: const AlwaysScrollableScrollPhysics(),
+              padding: const EdgeInsets.all(16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Location Header
                   Row(
                     children: [
-                      Icon(
+                      const Icon(
                         Icons.location_on,
                         color: AppColors.primaryBlue,
                         size: 20,
                       ),
-                      SizedBox(width: 8),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           _currentLocation,
@@ -104,15 +104,14 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ],
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
                   // Plan Safe Route Button
                   SizedBox(
                     width: double.infinity,
                     height: 64,
                     child: ElevatedButton(
-                      onPressed: () =>
-                          Navigator.pushNamed(context, '/route-planning'),
+                      onPressed: () => Navigator.pushNamed(context, '/route-planning'),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.primaryBlue,
                         shape: RoundedRectangleBorder(
@@ -121,7 +120,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
+                        children: const [
                           Icon(Icons.directions, size: 28),
                           SizedBox(width: 12),
                           Text(
@@ -135,37 +134,40 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 16),
+
+                  // Chatbot Button - UPDATED to open ChatScreen
+                  _buildChatbotButton(),
+                  const SizedBox(height: 24),
 
                   // Safety Status Widget
                   SafetyStatusWidget(
                     safetyLevel: _safetyLevel,
                     location: _currentLocation,
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
                   // Emergency SOS Button
                   EmergencyButton(
-                    onPressed: () =>
-                        Navigator.pushNamed(context, '/emergency-sos'),
+                    onPressed: () => Navigator.pushNamed(context, '/emergency-sos'),
                   ),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
                   // Recent Safety Alerts
                   Text(
                     'Recent Safety Alerts',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   _buildRecentAlerts(),
-                  SizedBox(height: 24),
+                  const SizedBox(height: 24),
 
                   // Quick Actions
                   Text(
                     'Quick Actions',
                     style: Theme.of(context).textTheme.headlineMedium,
                   ),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   _buildQuickActions(),
                 ],
               ),
@@ -179,7 +181,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 color: Colors.transparent,
                 child: Column(
                   children: [
-                    Spacer(),
+                    const Spacer(),
                     EmergencyTypeSelector(
                       onEmergencySelected: _handleEmergencySelected,
                       onCancel: _hideEmergencySelector,
@@ -194,6 +196,32 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         onTap: _onBottomNavTap,
         onEmergencyTap: _showEmergencyTypeSelector,
+      ),
+    );
+  }
+
+  Widget _buildChatbotButton() {
+    return SizedBox(
+      width: double.infinity,
+      height: 64,
+      child: ElevatedButton.icon(
+        onPressed: () {
+          Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const ChatScreen()),
+          );
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primaryBlue,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(32),
+          ),
+        ),
+        icon: const Icon(Icons.chat, size: 28),
+        label: const Text(
+          'Chat with Assistant',
+          style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+        ),
       ),
     );
   }
@@ -232,20 +260,20 @@ class _HomeScreenState extends State<HomeScreen> {
           final alert = alerts[index];
           return Container(
             width: 280,
-            margin: EdgeInsets.only(right: 12),
+            margin: const EdgeInsets.only(right: 12),
             child: Card(
               child: InkWell(
                 onTap: () => Navigator.pushNamed(context, '/safety-alerts'),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
-                  padding: EdgeInsets.all(16),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
                           _getSeverityIcon(alert['severity'] as String),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Text(
                               alert['title'] as String,
@@ -255,11 +283,11 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
-                      SizedBox(height: 8),
+                      const SizedBox(height: 8),
                       Row(
                         children: [
-                          Icon(Icons.location_on, size: 16, color: Colors.grey),
-                          SizedBox(width: 4),
+                          const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                          const SizedBox(width: 4),
                           Expanded(
                             child: Text(
                               alert['location'] as String,
@@ -268,17 +296,17 @@ class _HomeScreenState extends State<HomeScreen> {
                           ),
                         ],
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           Text(
                             alert['time'] as String,
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                            style: const TextStyle(color: Colors.grey, fontSize: 12),
                           ),
                           Text(
                             alert['distance'] as String,
-                            style: TextStyle(color: Colors.grey, fontSize: 12),
+                            style: const TextStyle(color: Colors.grey, fontSize: 12),
                           ),
                         ],
                       ),
@@ -301,10 +329,10 @@ class _HomeScreenState extends State<HomeScreen> {
             icon: Icons.report_problem,
             title: 'Report\nIncident',
             color: AppColors.warningAmber,
-            onTap: () => _showEmergencyTypeSelector(),
+            onTap: _showEmergencyTypeSelector,
           ),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: _buildQuickActionCard(
             icon: Icons.notifications,
@@ -313,7 +341,7 @@ class _HomeScreenState extends State<HomeScreen> {
             onTap: () => Navigator.pushNamed(context, '/safety-alerts'),
           ),
         ),
-        SizedBox(width: 12),
+        const SizedBox(width: 12),
         Expanded(
           child: _buildQuickActionCard(
             icon: Icons.share_location,
@@ -337,7 +365,7 @@ class _HomeScreenState extends State<HomeScreen> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
-          padding: EdgeInsets.all(16),
+          padding: const EdgeInsets.all(16),
           child: Column(
             children: [
               Container(
@@ -349,7 +377,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
                 child: Icon(icon, color: color, size: 24),
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 title,
                 textAlign: TextAlign.center,
@@ -390,8 +418,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _refreshData() async {
-    // Simulate data refresh
-    await Future.delayed(Duration(seconds: 1));
+    await Future.delayed(const Duration(seconds: 1));
     setState(() {
       _safetyLevel = [
         'Safe',
@@ -402,27 +429,26 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _shareLocation() {
-    // Implement location sharing functionality
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Share Location'),
-        content: Text(
+        title: const Text('Share Location'),
+        content: const Text(
           'Your current location will be shared with your emergency contacts.',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Cancel'),
+            child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('Location shared successfully')),
+                const SnackBar(content: Text('Location shared successfully')),
               );
             },
-            child: Text('Share'),
+            child: const Text('Share'),
           ),
         ],
       ),
@@ -436,7 +462,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     switch (index) {
       case 0:
-        // Already on home
         break;
       case 1:
         Navigator.pushNamed(context, '/route-planning');
@@ -464,8 +489,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
   void _handleEmergencySelected(String emergencyType) {
     _hideEmergencySelector();
-
-    // Navigate directly to safety reporting screen with pre-selected type
     Navigator.pushNamed(
       context,
       '/safety-reporting',
