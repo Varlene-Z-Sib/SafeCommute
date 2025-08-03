@@ -1,24 +1,22 @@
-# backend/app/routes/route_planning.py
-
-import os
+import re
 import requests
+from pathlib import Path
+from typing import List, Optional, Tuple
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
-from typing import List, Optional, Set, Tuple
 from dotenv import load_dotenv
-import re
-from pathlib import Path
 
 from backend.app.services import station_service
 
-# --- dotenv loading explicitly ---
+# --- dotenv loading (for other envs if needed) ---
 BASE_DIR = Path(__file__).resolve().parents[1]  # backend/app/ -> backend/
 dotenv_path = BASE_DIR / ".env"
 load_dotenv(dotenv_path=dotenv_path)
 
 # --- configuration ---
 router = APIRouter()
-GOOGLE_MAPS_API_KEY = os.getenv("GOOGLE_MAPS_API_KEY")
+GOOGLE_MAPS_API_KEY = "AIzaSyBU_hJukxYCZXxU5BTIzh651c4gYcKH9Uk"  # still hardcoded per request
 
 # --- Models ---
 class Coord(BaseModel):
@@ -46,8 +44,8 @@ class RouteOption(BaseModel):
 class RouteRequest(BaseModel):
     origin: Coord
     destination: Coord
-    preference: Optional[str] = "safest"  # "safest" or "fastest"
-    transport_types: Optional[List[str]] = None  # e.g. ["taxi", "bus"]
+    preference: Optional[str] = "safest"
+    transport_types: Optional[List[str]] = None
 
 # --- Safety scoring helpers ---
 SAFETY_LEVEL_SCORE = {
@@ -107,6 +105,46 @@ def compute_combined_safety(
         level = "red"
     return combined, level
 
+# --- Polyline decoding ---
+def decode_polyline(encoded: str) -> List[Coord]:
+    coords: List[Coord] = []
+    index = 0
+    lat = 0
+    lng = 0
+    length = len(encoded)
+
+    while index < length:
+        shift = 0
+        result = 0
+        while True:
+            if index >= length:
+                break
+            b = ord(encoded[index]) - 63
+            index += 1
+            result |= (b & 0x1F) << shift
+            shift += 5
+            if b < 0x20:
+                break
+        dlat = ~(result >> 1) if (result & 1) else (result >> 1)
+        lat += dlat
+
+        shift = 0
+        result = 0
+        while True:
+            if index >= length:
+                break
+            b = ord(encoded[index]) - 63
+            index += 1
+            result |= (b & 0x1F) << shift
+            shift += 5
+            if b < 0x20:
+                break
+        dlng = ~(result >> 1) if (result & 1) else (result >> 1)
+        lng += dlng
+
+        coords.append(Coord(lat=lat / 1e5, lng=lng / 1e5))
+    return coords
+
 # --- Endpoint ---
 @router.post("/routes", response_model=List[RouteOption])
 def get_routes(req: RouteRequest):
@@ -117,7 +155,6 @@ def get_routes(req: RouteRequest):
         origin_str = f"{req.origin.lat},{req.origin.lng}"
         destination_str = f"{req.destination.lat},{req.destination.lng}"
 
-        # Call Google Directions API
         url = "https://maps.googleapis.com/maps/api/directions/json"
         params = {
             "origin": origin_str,
@@ -133,11 +170,6 @@ def get_routes(req: RouteRequest):
             detail = data.get("error_message") or data.get("status")
             raise HTTPException(status_code=400, detail=f"Google API error: {detail}")
 
-        # Normalize transport_types filter
-        allowed_transports: Optional[Set[str]] = None
-        if req.transport_types:
-            allowed_transports = set(t.lower() for t in req.transport_types)
-
         raw_routes: List[RouteOption] = []
         for i, route in enumerate(data.get("routes", [])):
             legs = route.get("legs", [])
@@ -146,20 +178,34 @@ def get_routes(req: RouteRequest):
             leg = legs[0]
             duration = leg.get("duration", {}).get("text", "Unknown")
             distance = leg.get("distance", {}).get("text", "Unknown")
-            eta = leg.get("arrival_time", {}).get("text", "Unknown")
+            eta = leg.get("arrival_time", {}).get("text", None) or leg.get("duration", {}).get("text", "Unknown")
 
             steps = leg.get("steps", [])
             points: List[Coord] = []
             step_modes = set()
+
             for s in steps:
-                end_loc = s.get("end_location", {})
-                if "lat" in end_loc and "lng" in end_loc:
-                    points.append(Coord(lat=end_loc["lat"], lng=end_loc["lng"]))
+                polyline_str = s.get("polyline", {}).get("points")
+                if polyline_str:
+                    try:
+                        decoded = decode_polyline(polyline_str)
+                        points.extend(decoded)
+                    except Exception:
+                        end_loc = s.get("end_location", {})
+                        if "lat" in end_loc and "lng" in end_loc:
+                            points.append(Coord(lat=end_loc["lat"], lng=end_loc["lng"]))
+                else:
+                    end_loc = s.get("end_location", {})
+                    if "lat" in end_loc and "lng" in end_loc:
+                        points.append(Coord(lat=end_loc["lat"], lng=end_loc["lng"]))
+
                 mode = s.get("travel_mode", "WALKING").lower()
                 step_modes.add(mode)
 
-            if allowed_transports is not None and step_modes.isdisjoint(allowed_transports):
-                continue  # skip route that doesn't include any allowed mode
+            if not points:
+                overview = route.get("overview_polyline", {}).get("points")
+                if overview:
+                    points = decode_polyline(overview)
 
             base_safety = max(1.0, 5.0 - i * 1.0)
             combined_rating, safety_level = compute_combined_safety(
@@ -169,8 +215,6 @@ def get_routes(req: RouteRequest):
             )
 
             transport_types_list = list(step_modes)
-            if allowed_transports is not None:
-                transport_types_list = [t for t in transport_types_list if t in allowed_transports]
 
             raw_routes.append(RouteOption(
                 id=f"route_{i+1}",
@@ -186,9 +230,8 @@ def get_routes(req: RouteRequest):
             ))
 
         if not raw_routes:
-            raise HTTPException(status_code=404, detail="No routes matched filters/preferences")
+            raise HTTPException(status_code=404, detail="No routes returned from directions API")
 
-        # Sort based on preference
         pref = (req.preference or "").lower()
         if pref == "fastest":
             raw_routes.sort(key=lambda r: parse_duration_to_minutes(r.duration))
