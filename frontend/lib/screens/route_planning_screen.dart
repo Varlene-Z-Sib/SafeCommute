@@ -1,19 +1,15 @@
-// screens/enhanced_route_planning_screen.dart
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
-import '../utils/app_colors.dart';
-import '../widgets/custom_bottom_navigation.dart';
-import '../api_service.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:http/http.dart' as http;
+
+import '../utils/app_colors.dart';
 
 class RoutePlanningScreen extends StatefulWidget {
-
-  
   @override
   _RoutePlanningScreenState createState() => _RoutePlanningScreenState();
-
-  
 }
 
 class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
@@ -21,56 +17,33 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
   final TextEditingController _fromController = TextEditingController();
   final TextEditingController _toController = TextEditingController();
 
-  // Map and Location variables
-  LatLng _currentPosition = LatLng(-26.2041, 28.0473); // Johannesburg default
+  LatLng _currentPosition = LatLng(-26.2041, 28.0473);
   LatLng? _fromLocation;
   LatLng? _toLocation;
-  Set<Marker> _markers = {}; // from/to selection markers
-  Set<Marker> _stationMarkers = {};
+
+  Set<Marker> _markers = {};
   Set<Polyline> _polylines = {};
 
-  // Stations from backend
-  final ApiService _api = ApiService();
-  List<Map<String, dynamic>> _stations = [];
-  bool _loadingStations = true;
-  String? _stationLoadError;
-
-  // Route data - This will come from your backend API
   List<RouteOption> _routeOptions = [];
   RouteOption? _selectedRoute;
   bool _isLoadingRoutes = false;
   bool _showRouteResults = false;
 
-  // Filters
-  String _selectedRoutePreference = 'safest';
-  List<String> _selectedTransportTypes = ['taxi', 'bus'];
-
-  int _currentIndex = 1;
-
-  bool _pickingFrom = true; // whether tapping station sets origin or destination
+  final String _baseUrl = "http://127.0.0.1:8000"; // Android emulator localhost
 
   @override
   void initState() {
     super.initState();
-    _loadStations();
     _determinePosition();
   }
 
   Future<void> _determinePosition() async {
-    bool serviceEnabled;
-    LocationPermission permission;
-
-    serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) {
-      return;
-    }
-
-    permission = await Geolocator.checkPermission();
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       if (permission == LocationPermission.denied) return;
     }
-
     if (permission == LocationPermission.deniedForever) return;
 
     final pos = await Geolocator.getCurrentPosition();
@@ -79,1008 +52,229 @@ class _RoutePlanningScreenState extends State<RoutePlanningScreen> {
     });
 
     if (_mapController != null) {
-      _mapController.animateCamera(
-        CameraUpdate.newLatLngZoom(_currentPosition, 14),
-      );
+      _mapController.animateCamera(CameraUpdate.newLatLngZoom(_currentPosition, 14));
     }
   }
 
-  Future<void> _loadStations() async {
-    setState(() {
-      _loadingStations = true;
-      _stationLoadError = null;
-    });
-    try {
-      final raw = await _api.fetchStations();
-      _stations = raw.map<Map<String, dynamic>>((station) {
-        return {
-          'id': station['id'],
-          'name': station['name'],
-          'type': station['type'],
-          'lat': station['lat'],
-          'lng': station['lng'],
-          'safety_level':
-              (station['safety_level'] ?? 'unknown').toString().toLowerCase(),
-          'recent_reports': station['recent_reports'] ?? 0,
-        };
-      }).toList();
-      _buildStationMarkers();
-    } catch (e) {
-      setState(() {
-        _stationLoadError = e.toString();
-      });
-    } finally {
-      setState(() {
-        _loadingStations = false;
-      });
-    }
-  }
-
-  void _buildStationMarkers() {
-    final markers = <Marker>{};
-    for (var station in _stations) {
-      final safety = station['safety_level'] ?? 'unknown';
-      final marker = Marker(
-        markerId: MarkerId('station_${station['id']}'),
-        position: LatLng(station['lat'], station['lng']),
-        icon: BitmapDescriptor.defaultMarkerWithHue(_hueForSafety(safety)),
-        infoWindow: InfoWindow(
-          title: station['name'],
-          snippet: 'Safety: ${safety.toUpperCase()}',
-          onTap: () => _onStationTapped(station),
-        ),
-        onTap: () => _onStationTapped(station),
-      );
-      markers.add(marker);
-    }
-    setState(() {
-      _stationMarkers = markers;
-    });
-  }
-
-  double _hueForSafety(String level) {
-    switch (level) {
-      case 'green':
-        return BitmapDescriptor.hueGreen;
-      case 'yellow':
-        return BitmapDescriptor.hueYellow;
-      case 'orange':
-        return BitmapDescriptor.hueOrange;
-      case 'red':
-        return BitmapDescriptor.hueRed;
-      default:
-        return BitmapDescriptor.hueAzure;
-    }
-  }
-
-  void _onStationTapped(Map<String, dynamic> station) {
-    final latLng = LatLng(station['lat'], station['lng']);
-    setState(() {
-      if (_pickingFrom) {
-        _fromLocation = latLng;
-        _fromController.text = station['name'];
-      } else {
-        _toLocation = latLng;
-        _toController.text = station['name'];
-      }
-      _updateMarkers();
-    });
-
-    _mapController.animateCamera(
-      CameraUpdate.newLatLngZoom(latLng, 14),
-    );
-  }
-
-  void _updateMarkers() {
-    final selectionMarkers = <Marker>{};
-    if (_fromLocation != null) {
-      selectionMarkers.add(Marker(
-        markerId: MarkerId('from'),
-        position: _fromLocation!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
-        infoWindow: InfoWindow(title: 'From'),
-      ));
-    }
-    if (_toLocation != null) {
-      selectionMarkers.add(Marker(
-        markerId: MarkerId('to'),
-        position: _toLocation!,
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
-        infoWindow: InfoWindow(title: 'To'),
-      ));
-    }
-    setState(() {
-      _markers = selectionMarkers;
-    });
-  }
-
-  void _searchRoutes() {
+  Future<void> _searchRoutes() async {
     if (_fromLocation == null || _toLocation == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text('Please select both locations')));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Please select both origin and destination')),
+      );
       return;
     }
 
     setState(() {
       _isLoadingRoutes = true;
+      _showRouteResults = false;
     });
 
-    Future.delayed(Duration(seconds: 2), () {
+    final uri = Uri.parse("$_baseUrl/routes");
+final response = await http.post(
+  uri,
+  headers: {"Content-Type": "application/json"},
+  body: jsonEncode({
+    "origin": {"lat": _fromLocation!.latitude, "lng": _fromLocation!.longitude},
+    "destination": {"lat": _toLocation!.latitude, "lng": _toLocation!.longitude},
+    "preference": "safest", // or "fastest"
+    "transport_types": ["taxi", "bus"], // optional
+  }),
+);
+  
+
+    if (response.statusCode == 200) {
+      final data = jsonDecode(response.body);
       setState(() {
-        _routeOptions = _getMockRoutes();
+        _routeOptions = (data['routes'] as List).map((r) => RouteOption.fromJson(r)).toList();
         _selectedRoute = _routeOptions.isNotEmpty ? _routeOptions.first : null;
         _showRouteResults = true;
         _isLoadingRoutes = false;
       });
-
-      if (_selectedRoute != null) {
-        _displayRouteOnMap(_selectedRoute!);
-      }
-    });
+      if (_selectedRoute != null) _displayRouteOnMap(_selectedRoute!);
+    } else {
+      setState(() {
+        _isLoadingRoutes = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to fetch routes')),
+      );
+    }
   }
 
   void _displayRouteOnMap(RouteOption route) {
     final polylines = {
       Polyline(
-        polylineId: PolylineId('route_${route.id}'),
+        polylineId: PolylineId(route.id),
         points: route.routePoints,
         color: _getSafetyColor(route.safetyLevel),
         width: 5,
-        patterns: route.safetyLevel.toLowerCase() == 'high'
-            ? [PatternItem.dash(20), PatternItem.gap(10)]
-            : [],
       )
     };
-    setState(() {
-      _polylines = polylines;
-    });
+    setState(() => _polylines = polylines);
   }
 
   void _selectRoute(RouteOption route) {
-    setState(() {
-      _selectedRoute = route;
-    });
+    setState(() => _selectedRoute = route);
     _displayRouteOnMap(route);
-  }
-
-  void _onMapTap(LatLng position) {
-    // reserved
-  }
-
-  void _showRouteDetails(RouteOption route) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(builder: (context) => RouteDetailsScreen(route: route)),
-    );
-  }
-
-  void _startNavigation(RouteOption route) {
-    Navigator.pushNamed(context, '/live-navigation', arguments: route);
-  }
-
-  void _swapLocations() {
-    final tempText = _fromController.text;
-    final tempLocation = _fromLocation;
-    setState(() {
-      _fromController.text = _toController.text;
-      _toController.text = tempText;
-      _fromLocation = _toLocation;
-      _toLocation = tempLocation;
-      _updateMarkers();
-    });
-  }
-
-  void _useCurrentLocation() {
-    setState(() {
-      _fromController.text = 'Current Location';
-      _fromLocation = _currentPosition;
-      _updateMarkers();
-    });
-  }
-
-  void _showLocationPicker(bool isFromLocation) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        height: 300,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                isFromLocation ? 'Select From Location' : 'Select To Location',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                children: [
-                  ListTile(
-                    leading: Icon(Icons.business),
-                    title: Text('Johannesburg CBD'),
-                    onTap: () => _selectLocation(
-                      'Johannesburg CBD',
-                      LatLng(-26.2041, 28.0473),
-                      isFromLocation,
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.location_city),
-                    title: Text('Sandton'),
-                    onTap: () => _selectLocation(
-                      'Sandton',
-                      LatLng(-26.1076, 28.0567),
-                      isFromLocation,
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.train),
-                    title: Text('Park Station'),
-                    onTap: () => _selectLocation(
-                      'Park Station',
-                      LatLng(-26.2085, 28.0416),
-                      isFromLocation,
-                    ),
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.home),
-                    title: Text('Soweto'),
-                    onTap: () => _selectLocation(
-                      'Soweto',
-                      LatLng(-26.2678, 27.8546),
-                      isFromLocation,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _selectLocation(String name, LatLng location, bool isFromLocation) {
-    setState(() {
-      if (isFromLocation) {
-        _fromController.text = name;
-        _fromLocation = location;
-      } else {
-        _toController.text = name;
-        _toLocation = location;
-      }
-      _updateMarkers();
-    });
-    Navigator.pop(context);
-  }
-
-  void _showFavorites() {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Container(
-        height: 250,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Padding(
-              padding: EdgeInsets.all(16),
-              child: Text(
-                'Favorite Locations',
-                style: Theme.of(context).textTheme.headlineMedium,
-              ),
-            ),
-            Expanded(
-              child: ListView(
-                children: [
-                  ListTile(
-                    leading: Icon(Icons.work),
-                    title: Text('Work'),
-                    subtitle: Text('Sandton City'),
-                    onTap: () {
-                      _toController.text = 'Sandton City';
-                      _toLocation = LatLng(-26.1076, 28.0567);
-                      _updateMarkers();
-                      Navigator.pop(context);
-                    },
-                  ),
-                  ListTile(
-                    leading: Icon(Icons.home),
-                    title: Text('Home'),
-                    subtitle: Text('Soweto'),
-                    onTap: () {
-                      _toController.text = 'Soweto';
-                      _toLocation = LatLng(-26.2678, 27.8546);
-                      _updateMarkers();
-                      Navigator.pop(context);
-                    },
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  void _onBottomNavTap(int index) {
-    setState(() {
-      _currentIndex = index;
-    });
-
-    switch (index) {
-      case 0:
-        Navigator.pushNamed(context, '/home');
-        break;
-      case 1:
-        break;
-      case 2:
-        Navigator.pushNamed(context, '/safety-alerts');
-        break;
-      case 3:
-        Navigator.pushNamed(context, '/profile-settings');
-        break;
-    }
   }
 
   Color _getSafetyColor(String level) {
     switch (level.toLowerCase()) {
       case 'safe':
-        return AppColors.primarySafetyGreen;
+        return Colors.green;
       case 'moderate':
-        return AppColors.warningAmber;
-      case 'high':
+        return Colors.orange;
       case 'dangerous':
-        return AppColors.alertRed;
+        return Colors.red;
       default:
-        return AppColors.primarySafetyGreen;
+        return Colors.blue;
     }
-  }
-
-  IconData _getSafetyIcon(String level) {
-    switch (level.toLowerCase()) {
-      case 'safe':
-        return Icons.shield;
-      case 'moderate':
-        return Icons.warning;
-      case 'high':
-      case 'dangerous':
-        return Icons.dangerous;
-      default:
-        return Icons.shield;
-    }
-  }
-
-  IconData _getTransportIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'taxi':
-        return Icons.local_taxi;
-      case 'bus':
-        return Icons.directions_bus;
-      case 'train':
-        return Icons.train;
-      case 'walking':
-        return Icons.directions_walk;
-      case 'uber':
-        return Icons.car_rental;
-      default:
-        return Icons.directions;
-    }
-  }
-
-  IconData _getReportIcon(String type) {
-    switch (type.toLowerCase()) {
-      case 'theft':
-        return Icons.warning;
-      case 'harassment':
-        return Icons.report_problem;
-      case 'accident':
-        return Icons.car_crash;
-      case 'delay':
-        return Icons.access_time;
-      case 'overcrowding':
-        return Icons.people;
-      default:
-        return Icons.info;
-    }
-  }
-
-  Color _getReportColor(String severity) {
-    switch (severity.toLowerCase()) {
-      case 'low':
-        return AppColors.primarySafetyGreen;
-      case 'medium':
-        return AppColors.warningAmber;
-      case 'high':
-        return AppColors.alertRed;
-      default:
-        return Colors.grey;
-    }
-  }
-
-  // Mock data - Replace this with actual API call to your backend
-  List<RouteOption> _getMockRoutes() {
-    return [
-      RouteOption(
-        id: 'route_1',
-        duration: '35 min',
-        distance: '12.5 km',
-        cost: 'R18',
-        eta: '2:45 PM',
-        transportTypes: ['taxi', 'walking'],
-        safetyLevel: 'safe',
-        safetyRating: 4.2,
-        routePoints: [
-          if (_fromLocation != null) _fromLocation!,
-          LatLng(-26.1985, 28.0345),
-          LatLng(-26.1876, 28.0289),
-          if (_toLocation != null) _toLocation!,
-        ],
-        recentReports: [
-          SafetyReportSummary(
-            type: 'delay',
-            description: 'Minor traffic delay',
-            timeAgo: '10 min ago',
-            severity: 'low',
-          ),
-        ],
-      ),
-      RouteOption(
-        id: 'route_2',
-        duration: '42 min',
-        distance: '14.2 km',
-        cost: 'R15',
-        eta: '2:52 PM',
-        transportTypes: ['bus', 'walking'],
-        safetyLevel: 'moderate',
-        safetyRating: 3.8,
-        routePoints: [
-          if (_fromLocation != null) _fromLocation!,
-          LatLng(-26.1945, 28.0412),
-          LatLng(-26.1823, 28.0356),
-          if (_toLocation != null) _toLocation!,
-        ],
-        recentReports: [
-          SafetyReportSummary(
-            type: 'overcrowding',
-            description: 'Bus overcrowding reported',
-            timeAgo: '25 min ago',
-            severity: 'medium',
-          ),
-        ],
-      ),
-    ];
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: Text('Smart Route Planning'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.my_location),
-            onPressed: _determinePosition,
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text('Smart Route Planning')),
       body: Column(
         children: [
-          _buildSearchSection(),
-
-          if (_loadingStations)
-            LinearProgressIndicator()
-          else if (_stationLoadError != null)
-            Container(
-              color: Colors.red.withOpacity(0.1),
-              padding: EdgeInsets.all(8),
-              child: Row(
-                children: [
-                  Icon(Icons.error, color: Colors.red),
-                  SizedBox(width: 8),
-                  Expanded(child: Text('Failed to load stations: $_stationLoadError')),
-                  IconButton(icon: Icon(Icons.refresh), onPressed: _loadStations),
-                ],
+          Padding(
+            padding: const EdgeInsets.all(12.0),
+            child: Column(children: [
+              TextField(
+                controller: _fromController,
+                decoration: InputDecoration(labelText: 'From'),
+                onTap: () => _pickLocation(true),
               ),
-            ),
-
+              TextField(
+                controller: _toController,
+                decoration: InputDecoration(labelText: 'To'),
+                onTap: () => _pickLocation(false),
+              ),
+              SizedBox(height: 10),
+              ElevatedButton(
+                onPressed: _isLoadingRoutes ? null : _searchRoutes,
+                child: _isLoadingRoutes ? CircularProgressIndicator() : Text('Find Safe Routes'),
+              )
+            ]),
+          ),
           Expanded(
-            child: _showRouteResults ? _buildMapWithResults() : _buildMapOnly(),
-          ),
-        ],
-      ),
-      bottomNavigationBar: CustomBottomNavigation(
-        currentIndex: _currentIndex,
-        onTap: _onBottomNavTap,
-      ),
-    );
-  }
-
-  Widget _buildSearchSection() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.shadowColor,
-            blurRadius: 4,
-            offset: Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // From/To toggle
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ChoiceChip(
-                label: Text('From'),
-                selected: _pickingFrom,
-                onSelected: (_) => setState(() => _pickingFrom = true),
-              ),
-              SizedBox(width: 8),
-              ChoiceChip(
-                label: Text('To'),
-                selected: !_pickingFrom,
-                onSelected: (_) => setState(() => _pickingFrom = false),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-
-          // From Field
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.backgroundLight,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: TextField(
-              controller: _fromController,
-              decoration: InputDecoration(
-                hintText: 'From location',
-                prefixIcon: Icon(
-                  Icons.my_location,
-                  color: AppColors.primaryBlue,
-                ),
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.gps_fixed),
-                  onPressed: _useCurrentLocation,
-                ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.all(16),
-              ),
-              onTap: () => _showLocationPicker(true),
-            ),
-          ),
-
-          SizedBox(height: 12),
-
-          // Swap Button
-          Center(
-            child: GestureDetector(
-              onTap: _swapLocations,
-              child: Container(
-                width: 40,
-                height: 40,
-                decoration: BoxDecoration(
-                  color: AppColors.primaryBlue,
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.swap_vert, color: Colors.white, size: 20),
-              ),
-            ),
-          ),
-
-          SizedBox(height: 12),
-
-          // To Field
-          Container(
-            decoration: BoxDecoration(
-              color: AppColors.backgroundLight,
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: TextField(
-              controller: _toController,
-              decoration: InputDecoration(
-                hintText: 'To location',
-                prefixIcon: Icon(Icons.location_on, color: AppColors.alertRed),
-                suffixIcon: IconButton(
-                  icon: Icon(Icons.star_border),
-                  onPressed: _showFavorites,
-                ),
-                border: InputBorder.none,
-                contentPadding: EdgeInsets.all(16),
-              ),
-              onTap: () => _showLocationPicker(false),
-            ),
-          ),
-
-          SizedBox(height: 16),
-
-          // Transport Type Filters
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: [
-                _buildTransportChip('Taxi', 'taxi', Icons.local_taxi),
-                SizedBox(width: 8),
-                _buildTransportChip('Bus', 'bus', Icons.directions_bus),
-                SizedBox(width: 8),
-                _buildTransportChip('Train', 'train', Icons.train),
-                SizedBox(width: 8),
-                _buildTransportChip('Walking', 'walking', Icons.directions_walk),
-                SizedBox(width: 8),
-                _buildTransportChip('Uber', 'uber', Icons.car_rental),
-              ],
-            ),
-          ),
-
-          SizedBox(height: 16),
-
-          // Search Button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              onPressed: _isLoadingRoutes ? null : _searchRoutes,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.primaryBlue,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                padding: EdgeInsets.symmetric(vertical: 16),
-              ),
-              child: _isLoadingRoutes
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        ),
-                        SizedBox(width: 12),
-                        Text('Finding Safe Routes...'),
-                      ],
-                    )
-                  : Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(Icons.search),
-                        SizedBox(width: 8),
-                        Text('Find Safe Routes'),
-                      ],
-                    ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMapOnly() {
-    return GoogleMap(
-      onMapCreated: (GoogleMapController controller) {
-        _mapController = controller;
-        if (_fromLocation != null) {
-          controller.animateCamera(CameraUpdate.newLatLngZoom(_fromLocation!, 14));
-        } else if (_toLocation != null) {
-          controller.animateCamera(CameraUpdate.newLatLngZoom(_toLocation!, 14));
-        }
-      },
-      initialCameraPosition: CameraPosition(target: _currentPosition, zoom: 14.0),
-      markers: {
-        ..._markers,
-        ..._stationMarkers,
-      },
-      polylines: _polylines,
-      onTap: _onMapTap,
-      myLocationEnabled: true,
-      myLocationButtonEnabled: false,
-      mapType: MapType.normal,
-      zoomControlsEnabled: false,
-    );
-  }
-
-  Widget _buildMapWithResults() {
-    return Column(
-      children: [
-        Expanded(
-          flex: 3,
-          child: Stack(
-            children: [
+            child: Stack(children: [
               GoogleMap(
-                onMapCreated: (GoogleMapController controller) {
-                  _mapController = controller;
-                  if (_selectedRoute != null && _selectedRoute!.routePoints.isNotEmpty) {
-                    controller.animateCamera(CameraUpdate.newLatLngZoom(_selectedRoute!.routePoints.first, 13));
-                  }
-                },
-                initialCameraPosition: CameraPosition(target: _currentPosition, zoom: 14.0),
-                markers: {
-                  ..._markers,
-                  ..._stationMarkers,
-                },
+                onMapCreated: (c) => _mapController = c,
+                initialCameraPosition: CameraPosition(target: _currentPosition, zoom: 14),
+                markers: _markers,
                 polylines: _polylines,
                 myLocationEnabled: true,
-                myLocationButtonEnabled: false,
-                zoomControlsEnabled: false,
               ),
-              if (_selectedRoute != null)
+              if (_showRouteResults)
                 Positioned(
-                  top: 16,
-                  left: 16,
-                  right: 16,
-                  child: _buildRouteInfoCard(_selectedRoute!),
-                ),
-            ],
+                  bottom: 10,
+                  left: 10,
+                  right: 10,
+                  child: Container(
+                    color: Colors.white,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: _routeOptions
+                          .map((route) => ListTile(
+                                title: Text('${route.distance} • ${route.duration} • ${route.cost}'),
+                                subtitle: Text('Safety: ${route.safetyLevel}'),
+                                trailing: ElevatedButton(
+                                  onPressed: () => _selectRoute(route),
+                                  child: Text('Select'),
+                                ),
+                              ))
+                          .toList(),
+                    ),
+                  ),
+                )
+            ]),
           ),
-        ),
-        Expanded(
-          flex: 2,
-          child: Container(
-            decoration: BoxDecoration(
-              color: Colors.white,
-              borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 10,
-                  offset: Offset(0, -2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: EdgeInsets.symmetric(vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[300],
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-                Expanded(
-                  child: ListView.builder(
-                    padding: EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: _routeOptions.length,
-                    itemBuilder: (context, index) {
-                      final route = _routeOptions[index];
-                      return _buildRouteOptionCard(route, index);
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRouteInfoCard(RouteOption route) {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      route.duration,
-                      style: Theme.of(context)
-                          .textTheme
-                          .headlineLarge
-                          ?.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    Text(
-                      '${route.distance} • ${route.cost}',
-                      style: TextStyle(color: Colors.grey[600]),
-                    ),
-                  ],
-                ),
-                Container(
-                  padding: EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: _getSafetyColor(route.safetyLevel),
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        _getSafetyIcon(route.safetyLevel),
-                        color: Colors.white,
-                        size: 16,
-                      ),
-                      SizedBox(width: 4),
-                      Text(
-                        route.safetyLevel.toUpperCase(),
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            SizedBox(height: 12),
-            Row(
-              children: [
-                Icon(Icons.access_time, size: 16, color: Colors.grey[600]),
-                SizedBox(width: 4),
-                Text('ETA: ${route.eta}', style: TextStyle(color: Colors.grey[600])),
-                SizedBox(width: 16),
-                Row(
-                  children: List.generate(
-                    5,
-                    (i) => Icon(
-                      Icons.star,
-                      size: 16,
-                      color: i < route.safetyRating.floor() ? Colors.amber : Colors.grey[300],
-                    ),
-                  ),
-                ),
-                SizedBox(width: 4),
-                Text(route.safetyRating.toString(), style: TextStyle(fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ],
-        ),
+        ],
       ),
     );
   }
 
-  Widget _buildRouteOptionCard(RouteOption route, int index) {
-    bool isSelected = _selectedRoute?.id == route.id;
-    return Card(
-      margin: EdgeInsets.only(bottom: 12),
-      color: isSelected ? AppColors.primaryBlue.withOpacity(0.1) : null,
-      child: InkWell(
-        onTap: () => _selectRoute(route),
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        route.duration,
-                        style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                              color: isSelected ? AppColors.primaryBlue : null,
-                            ),
-                      ),
-                      Text('${route.distance} • ${route.cost}', style: TextStyle(color: Colors.grey[600])),
-                    ],
-                  ),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Row(
-                        children: List.generate(
-                          5,
-                          (i) => Icon(
-                            Icons.star,
-                            size: 16,
-                            color: i < route.safetyRating.floor() ? Colors.amber : Colors.grey[300],
-                          ),
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Container(
-                        padding: EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: _getSafetyColor(route.safetyLevel),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(route.safetyLevel.toUpperCase(),
-                            style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-              SizedBox(height: 12),
-              Row(
-                children: route.transportTypes
-                    .take(3)
-                    .map(
-                      (type) => Container(
-                        margin: EdgeInsets.only(right: 8),
-                        child: Icon(_getTransportIcon(type), size: 20, color: AppColors.primaryBlue),
-                      ),
-                    )
-                    .toList(),
-              ),
-              SizedBox(height: 8),
-              if (route.recentReports.isNotEmpty) ...[
-                Text('Recent Reports:', style: TextStyle(fontWeight: FontWeight.w600, fontSize: 12, color: Colors.grey[700])),
-                SizedBox(height: 4),
-                ...route.recentReports.take(2).map(
-                      (report) => Padding(
-                        padding: EdgeInsets.only(bottom: 2),
-                        child: Row(
-                          children: [
-                            Icon(_getReportIcon(report.type), size: 12, color: _getReportColor(report.severity)),
-                            SizedBox(width: 4),
-                            Expanded(
-                              child: Text(
-                                '${report.description} (${report.timeAgo})',
-                                style: TextStyle(fontSize: 11, color: _getReportColor(report.severity)),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-              ],
-              SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: OutlinedButton(onPressed: () => _showRouteDetails(route), child: Text('Details'))),
-                  SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: () => _startNavigation(route),
-                      style: ElevatedButton.styleFrom(backgroundColor: AppColors.primarySafetyGreen),
-                      child: Text('Navigate'),
-                    ),
-                  ),
-                ],
-              )
-            ],
+  void _pickLocation(bool isFrom) async {
+    // You can replace this with a place picker or location picker UI
+    showModalBottomSheet(
+      context: context,
+      builder: (context) => ListView(
+        children: [
+          ListTile(
+            title: Text("Johannesburg CBD"),
+            onTap: () {
+              Navigator.pop(context);
+              final loc = LatLng(-26.2041, 28.0473);
+              setState(() {
+                if (isFrom) {
+                  _fromLocation = loc;
+                  _fromController.text = "Johannesburg CBD";
+                } else {
+                  _toLocation = loc;
+                  _toController.text = "Johannesburg CBD";
+                }
+                _updateMarkers();
+              });
+            },
           ),
-        ),
+          ListTile(
+            title: Text("Sandton"),
+            onTap: () {
+              Navigator.pop(context);
+              final loc = LatLng(-26.1076, 28.0567);
+              setState(() {
+                if (isFrom) {
+                  _fromLocation = loc;
+                  _fromController.text = "Sandton";
+                } else {
+                  _toLocation = loc;
+                  _toController.text = "Sandton";
+                }
+                _updateMarkers();
+              });
+            },
+          )
+        ],
       ),
     );
+  }
+
+  void _updateMarkers() {
+    final newMarkers = <Marker>{};
+    if (_fromLocation != null) {
+      newMarkers.add(Marker(
+        markerId: MarkerId("from"),
+        position: _fromLocation!,
+        infoWindow: InfoWindow(title: "From"),
+      ));
+    }
+    if (_toLocation != null) {
+      newMarkers.add(Marker(
+        markerId: MarkerId("to"),
+        position: _toLocation!,
+        infoWindow: InfoWindow(title: "To"),
+      ));
+    }
+    setState(() => _markers = newMarkers);
   }
 }
 
-// Simple data classes for the frontend
 class RouteOption {
   final String id;
   final String duration;
   final String distance;
   final String cost;
-  final String eta;
-  final List<String> transportTypes;
   final String safetyLevel;
-  final double safetyRating;
   final List<LatLng> routePoints;
-  final List<SafetyReportSummary> recentReports;
 
   RouteOption({
     required this.id,
     required this.duration,
     required this.distance,
     required this.cost,
-    required this.eta,
-    required this.transportTypes,
     required this.safetyLevel,
-    required this.safetyRating,
     required this.routePoints,
-    this.recentReports = const [],
   });
 
   factory RouteOption.fromJson(Map<String, dynamic> json) {
@@ -1089,98 +283,10 @@ class RouteOption {
       duration: json['duration'],
       distance: json['distance'],
       cost: json['cost'],
-      eta: json['eta'],
-      transportTypes: List<String>.from(json['transport_types']),
       safetyLevel: json['safety_level'],
-      safetyRating: (json['safety_rating'] as num).toDouble(),
       routePoints: (json['route_points'] as List)
-          .map((point) => LatLng(point['lat'], point['lng']))
+          .map((pt) => LatLng(pt['lat'], pt['lng']))
           .toList(),
-      recentReports: (json['recent_reports'] as List)
-          .map((report) => SafetyReportSummary.fromJson(report))
-          .toList(),
-    );
-  }
-}
-
-class SafetyReportSummary {
-  final String type;
-  final String description;
-  final String timeAgo;
-  final String severity;
-
-  SafetyReportSummary({
-    required this.type,
-    required this.description,
-    required this.timeAgo,
-    required this.severity,
-  });
-
-  factory SafetyReportSummary.fromJson(Map<String, dynamic> json) {
-    return SafetyReportSummary(
-      type: json['type'],
-      description: json['description'],
-      timeAgo: json['time_ago'],
-      severity: json['severity'],
-    );
-  }
-}
-
-// Placeholder for Route Details Screen
-class RouteDetailsScreen extends StatelessWidget {
-  final RouteOption route;
-
-  const RouteDetailsScreen({Key? key, required this.route}) : super(key: key);
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text('Route Details')),
-      body: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Duration: ${route.duration}', style: Theme.of(context).textTheme.headlineMedium),
-            SizedBox(height: 8),
-            Text('Distance: ${route.distance}'),
-            Text('Cost: ${route.cost}'),
-            Text('ETA: ${route.eta}'),
-            Text('Safety Rating: ${route.safetyRating}/5.0'),
-            SizedBox(height: 16),
-            Text('Transport Types:', style: Theme.of(context).textTheme.headlineSmall),
-            Text(route.transportTypes.join(', ')),
-            SizedBox(height: 16),
-            if (route.recentReports.isNotEmpty) ...[
-              Text('Recent Reports:', style: Theme.of(context).textTheme.headlineSmall),
-              ...route.recentReports.map(
-                (report) => ListTile(
-                  title: Text(report.description),
-                  subtitle: Text('${report.type} - ${report.timeAgo}'),
-                  leading: Icon(
-                    Icons.warning,
-                    color: report.severity == 'high'
-                        ? Colors.red
-                        : report.severity == 'medium'
-                            ? Colors.orange
-                            : Colors.green,
-                  ),
-                ),
-              ),
-            ],
-            Spacer(),
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: () {
-                  Navigator.pushNamed(context, '/live-navigation', arguments: route);
-                },
-                child: Text('Start Navigation'),
-              ),
-            ),
-          ],
-        ),
-      ),
     );
   }
 }

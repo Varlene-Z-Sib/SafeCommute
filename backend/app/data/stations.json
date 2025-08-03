@@ -52,5 +52,95 @@
     "lng": 28.0580,
     "safety_level": "red",
     "recent_reports": 6
+  },
+  {
+    "id": "wits_braamfontein",
+    "name": "Wits University Station",
+    "type": "bus",
+    "lat": -26.1951,
+    "lng": 28.0340,
+    "safety_level": "green",
+    "recent_reports": 0
+  },
+  {
+    "id": "jorissen_braam",
+    "name": "Jorissen Street Stop",
+    "type": "bus",
+    "lat": -26.1934,
+    "lng": 28.0357,
+    "safety_level": "yellow",
+    "recent_reports": 2
+  },
+  {
+    "id": "joburg_station",
+    "name": "Johannesburg Station",
+    "type": "train",
+    "lat": -26.1961,
+    "lng": 28.0386,
+    "safety_level": "yellow",
+    "recent_reports": 4
+  },
+  {
+    "id": "sandton_city",
+    "name": "Sandton City Transport Hub",
+    "type": "bus",
+    "lat": -26.1076,
+    "lng": 28.0567,
+    "safety_level": "green",
+    "recent_reports": 1
+  },
+  {
+    "id": "or_tambo",
+    "name": "OR Tambo International",
+    "type": "train",
+    "lat": -26.1392,
+    "lng": 28.2460,
+    "safety_level": "green",
+    "recent_reports": 2
+  },
+  {
+    "id": "lanseria_airport",
+    "name": "Lanseria International Airport",
+    "type": "train",
+    "lat": -25.9385,
+    "lng": 27.9261,
+    "safety_level": "yellow",
+    "recent_reports": 1
+  },
+  {
+    "id": "roodepoort_central",
+    "name": "Roodepoort Central",
+    "type": "bus",
+    "lat": -26.1625,
+    "lng": 27.8725,
+    "safety_level": "red",
+    "recent_reports": 6
+  },
+  {
+    "id": "roodepoort_area",
+    "name": "Roodepoort General Area",
+    "type": "bus",
+    "lat": -26.120134,
+    "lng": 27.901464,
+    "safety_level": "yellow",
+    "recent_reports": 3
+  },
+  {
+    "id": "roodepoort_taxi",
+    "name": "Roodepoort Taxi Rank",
+    "type": "taxi",
+    "lat": -26.1626,
+    "lng": 27.8730,
+    "safety_level": "red",
+    "recent_reports": 5
+  },
+  {
+    "id": "roodepoort_depot",
+    "name": "Roodepoort Metrobus Depot",
+    "type": "bus",
+    "lat": -26.1627,
+    "lng": 27.8731,
+    "safety_level": "green",
+    "recent_reports": 2
   }
 ]

@@ -18,7 +18,7 @@ import 'screens/profile_settings_screen.dart';
 
 import 'utils/app_colors.dart';
 import 'utils/app_theme.dart';
-import 'api_service.dart';
+import 'api_service.dart' as api_service;
 
 void main() {
   // Toggle between test mode and full app mode
@@ -125,7 +125,7 @@ class StationScreen extends StatefulWidget {
 }
 
 class _StationScreenState extends State<StationScreen> {
-  final ApiService apiService = ApiService();
+  final api_service.ApiService apiService = api_service.ApiService();
   List<dynamic> stations = [];
 
   @override

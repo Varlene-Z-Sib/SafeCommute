@@ -168,5 +168,20 @@
     "resolved": false,
     "status": "Pending",
     "timestamp": "2025-08-02T15:52:35.612845"
+  },
+  {
+    "id": "inc_1754190529034",
+    "station_id": "",
+    "user_id": null,
+    "location_id": "",
+    "type": "theft",
+    "description": "hy im tierd",
+    "severity": "high",
+    "anonymous": true,
+    "lat": -26.08492897738537,
+    "lng": 27.877467972228327,
+    "resolved": false,
+    "status": "Pending",
+    "timestamp": "2025-08-03T05:08:49.038384"
   }
 ]

@@ -6,6 +6,13 @@ from backend.app.routes import stations
 from backend.app.routes import areas
 from backend.app.routes import userR
 from backend.app.routes import safetyReport
+from backend.app.routes import location 
+from backend.app.routes import route_planning
+
+ # new
+from dotenv import load_dotenv
+
+load_dotenv()
 
 
 app = FastAPI()
@@ -26,7 +33,11 @@ app.include_router(stations.router)
 app.include_router(areas.router)    
 app.include_router(userR.router)
 app.include_router(safetyReport.router)
+app.include_router(location.router) 
+app.include_router(route_planning.router)
+
 app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
+
 
 
 app.include_router(stations.router)

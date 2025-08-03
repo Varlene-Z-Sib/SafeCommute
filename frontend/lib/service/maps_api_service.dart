@@ -147,3 +147,32 @@ class LocationSuggestion {
     );
   }
 }
+
+class SafetyReportSummary {
+  final String id;
+  final String type;
+  final String description;
+  final LatLng location;
+  final String severity;
+  final DateTime timestamp;
+
+  SafetyReportSummary({
+    required this.id,
+    required this.type,
+    required this.description,
+    required this.location,
+    required this.severity,
+    required this.timestamp,
+  });
+
+  factory SafetyReportSummary.fromJson(Map<String, dynamic> json) {
+    return SafetyReportSummary(
+      id: json['id'] ?? '',
+      type: json['type'] ?? '',
+      description: json['description'] ?? '',
+      location: LatLng(json['location']['lat'], json['location']['lng']),
+      severity: json['severity'] ?? '',
+      timestamp: DateTime.parse(json['timestamp']),
+    );
+  }
+}

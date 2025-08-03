@@ -1,5 +1,15 @@
-import 'package:flutter/material.dart';
 import 'dart:async';
+import 'dart:convert';
+
+import 'package:flutter/material.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'package:vibration/vibration.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:http/http.dart' as http;
+
 import '../../utils/app_colors.dart';
 
 class EmergencySosScreen extends StatefulWidget {
@@ -21,16 +31,20 @@ class _EmergencySosScreenState extends State<EmergencySosScreen>
   bool _isCountdownActive = false;
   bool _isLocationSharing = false;
   bool _silentMode = false;
-  final String _currentLocation = 'Johannesburg CBD, South Africa';
+  String _currentLocation = 'Fetching location...';
+  Position? _currentPosition;
 
-  final List<Map<String, String>> _emergencyContacts = [
+  late AudioPlayer _audioPlayer;
+  SharedPreferences? _prefs;
+
+  List<Map<String, String>> _emergencyContacts = [
     {'name': 'Police', 'number': '10111', 'icon': 'police'},
     {'name': 'Medical', 'number': '10177', 'icon': 'medical'},
     {'name': 'Fire', 'number': '10111', 'icon': 'fire'},
     {'name': 'Private Security', 'number': '0800 123 456', 'icon': 'security'},
   ];
 
-  final List<Map<String, String>> _personalContacts = [
+  List<Map<String, String>> _personalContacts = [
     {'name': 'John Doe', 'number': '+27 82 123 4567'},
     {'name': 'Jane Smith', 'number': '+27 83 987 6543'},
     {'name': 'Emergency Contact', 'number': '+27 84 555 0123'},
@@ -40,467 +54,275 @@ class _EmergencySosScreenState extends State<EmergencySosScreen>
   void initState() {
     super.initState();
     _initializeAnimations();
+    _audioPlayer = AudioPlayer();
+    _loadPreferences();
+    _requestLocationPermissionAndFetch();
   }
 
   void _initializeAnimations() {
     _pulseController = AnimationController(
-      duration: Duration(seconds: 1),
+      duration: const Duration(seconds: 1),
       vsync: this,
     );
-
     _countdownController = AnimationController(
-      duration: Duration(seconds: 10),
+      duration: const Duration(seconds: 10),
       vsync: this,
     );
-
     _pulseAnimation = Tween<double>(begin: 1.0, end: 1.3).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
     );
-
     _countdownAnimation = Tween<double>(begin: 1.0, end: 0.0).animate(
       CurvedAnimation(parent: _countdownController, curve: Curves.linear),
     );
-
     _pulseController.repeat(reverse: true);
   }
+
+  Future<void> _loadPreferences() async {
+    _prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isLocationSharing = _prefs?.getBool('location_sharing') ?? false;
+      _silentMode = _prefs?.getBool('silent_mode') ?? false;
+    });
+    final emJson = _prefs?.getString('emergency_contacts');
+    final perJson = _prefs?.getString('personal_contacts');
+    if (emJson != null) {
+      _emergencyContacts = List<Map<String, String>>.from(
+          jsonDecode(emJson).map((e) => Map<String, String>.from(e)));
+    }
+    if (perJson != null) {
+      _personalContacts = List<Map<String, String>>.from(
+          jsonDecode(perJson).map((e) => Map<String, String>.from(e)));
+    }
+  }
+
+  Future<void> _savePreferences() async {
+    await _prefs?.setBool('location_sharing', _isLocationSharing);
+    await _prefs?.setBool('silent_mode', _silentMode);
+    await _prefs?.setString('emergency_contacts', jsonEncode(_emergencyContacts));
+    await _prefs?.setString('personal_contacts', jsonEncode(_personalContacts));
+  }
+
+  Future<void> _requestLocationPermissionAndFetch() async {
+    var status = await Permission.locationWhenInUse.status;
+    if (!status.isGranted) {
+      status = await Permission.locationWhenInUse.request();
+      if (!status.isGranted) {
+        setState(() {
+          _currentLocation = 'Location permission denied';
+        });
+        return;
+      }
+    }
+    _fetchCurrentLocation();
+  }
+Future<void> _fetchCurrentLocation() async {
+  try {
+    bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      setState(() {
+        _currentLocation = 'Location services disabled';
+      });
+      return;
+    }
+
+    LocationPermission permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+      if (permission == LocationPermission.denied) {
+        setState(() {
+          _currentLocation = 'Location permission denied';
+        });
+        return;
+      }
+    }
+
+    if (permission == LocationPermission.deniedForever) {
+      setState(() {
+        _currentLocation = 'Location permissions permanently denied';
+      });
+      return;
+    }
+
+    // Try to get GPS position
+    _currentPosition = await Geolocator.getCurrentPosition(
+      desiredAccuracy: LocationAccuracy.high,
+    );
+
+    setState(() {
+      _currentLocation =
+          'Lat: ${_currentPosition!.latitude.toStringAsFixed(5)}, '
+          'Lng: ${_currentPosition!.longitude.toStringAsFixed(5)}';
+    });
+
+    if (_isLocationSharing) {
+      await _sendLocationToBackend();
+    }
+  } catch (e) {
+    // Fallback: IP-based location
+    try {
+      final response = await Uri.parse("https://ipapi.co/json/").resolveUri(Uri());
+      setState(() {
+        _currentLocation = 'Using IP-based location';
+      });
+    } catch (e2) {
+      setState(() {
+        _currentLocation = 'Failed to get location';
+      });
+    }
+  }
+}
+
+
+  Future<void> _sendLocationToBackend() async {
+  if (_currentPosition != null) {
+    final url = Uri.parse('http://127.0.0.1:8000/location/update');
+    final response = await http.post(
+      url,
+      headers: {"Content-Type": "application/json"},
+      body: jsonEncode({
+        "lat": _currentPosition!.latitude,
+        "lng": _currentPosition!.longitude,
+        "user_id": "device_001",
+        "share": _isLocationSharing
+      }),
+    );
+    debugPrint("Backend location response: ${response.body}");
+  }
+}
+
 
   @override
   void dispose() {
     _pulseController.dispose();
     _countdownController.dispose();
     _countdownTimer?.cancel();
+    _audioPlayer.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: AppColors.alertRed,
-      appBar: AppBar(
-        backgroundColor: AppColors.alertRed,
-        foregroundColor: Colors.white,
-        title: Text(
-          'EMERGENCY SOS',
-          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
-        ),
-        centerTitle: true,
-        elevation: 0,
-      ),
-      body: SafeArea(
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            children: [
-              // Emergency Status
-              if (_isCountdownActive) _buildCountdownSection(),
+  void _startEmergencyCountdown() {
+    setState(() {
+      _isCountdownActive = true;
+      _countdownSeconds = 10;
+    });
+    _countdownController.forward(from: 0);
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      setState(() {
+        _countdownSeconds--;
+      });
+      if (_countdownSeconds <= 0) {
+        _callEmergencyNow();
+      }
+    });
+    if (!_silentMode) {
+      _playAlarmSound();
+      _vibrateDevice();
+    }
+  }
 
-              // Location Info
-              _buildLocationInfo(),
+  void _cancelCountdown() {
+    _countdownTimer?.cancel();
+    _countdownController.reset();
+    setState(() {
+      _isCountdownActive = false;
+      _countdownSeconds = 10;
+    });
+    _stopAlarmSound();
+  }
 
-              SizedBox(height: 24),
+  Future<void> _callEmergencyNow() async {
+    _cancelCountdown();
+    await _callNumber('10111');
+  }
 
-              // Main Emergency Button
-              Expanded(child: Center(child: _buildMainEmergencyButton())),
+  Future<void> _callNumber(String number) async {
+    final Uri callUri = Uri(scheme: 'tel', path: number);
+    if (await canLaunchUrl(callUri)) {
+      await launchUrl(callUri);
+    } else {
+      _showDialog(
+        title: 'Call Failed',
+        message: 'Could not initiate call to $number',
+      );
+    }
+  }
 
-              SizedBox(height: 24),
+  Future<void> _sendSMS(String number) async {
+    final Uri smsUri = Uri(scheme: 'sms', path: number);
+    if (await canLaunchUrl(smsUri)) {
+      await launchUrl(smsUri);
+    } else {
+      _showDialog(
+        title: 'SMS Failed',
+        message: 'Could not send SMS to $number',
+      );
+    }
+  }
 
-              // Quick Actions
-              _buildQuickActions(),
+  void _startFakeCall() {
+    _showDialog(
+      title: 'Fake Call',
+      message: 'Starting fake call for safety...',
+    );
+  }
 
-              SizedBox(height: 24),
-
-              // Emergency Contacts
-              _buildEmergencyContacts(),
-
-              SizedBox(height: 16),
-
-              // Personal Contacts
-              _buildPersonalContacts(),
-            ],
-          ),
+  void _shareLocationWithContacts() {
+    setState(() {
+      _isLocationSharing = !_isLocationSharing;
+    });
+    _savePreferences();
+    if (_isLocationSharing) _sendLocationToBackend();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          _isLocationSharing
+              ? 'Location sharing enabled'
+              : 'Location sharing disabled',
         ),
       ),
     );
   }
 
-  Widget _buildCountdownSection() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
+  void _toggleSilentMode() {
+    setState(() {
+      _silentMode = !_silentMode;
+    });
+    _savePreferences();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(_silentMode ? 'Silent mode enabled' : 'Silent mode disabled'),
       ),
-      child: Column(
-        children: [
-          Text(
-            'CALLING EMERGENCY SERVICES IN',
-            style: TextStyle(
-              color: AppColors.alertRed,
-              fontWeight: FontWeight.bold,
-              fontSize: 16,
-            ),
-          ),
-          SizedBox(height: 8),
-          AnimatedBuilder(
-            animation: _countdownAnimation,
-            builder: (context, child) {
-              return Text(
-                '$_countdownSeconds',
-                style: TextStyle(
-                  color: AppColors.alertRed,
-                  fontSize: 48,
-                  fontWeight: FontWeight.bold,
-                ),
-              );
-            },
-          ),
-          SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _cancelCountdown,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.grey[600],
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text('CANCEL'),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: _callEmergencyNow,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.alertRed,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: Text('CALL NOW'),
-                ),
-              ),
-            ],
+    );
+  }
+
+  Future<void> _playAlarmSound() async {
+    await _audioPlayer.setSource(AssetSource('assets/sounds/alarm.mp3'));
+    await _audioPlayer.resume();
+  }
+
+  Future<void> _stopAlarmSound() async {
+    await _audioPlayer.stop();
+  }
+
+  void _vibrateDevice() async {
+    if (await Vibration.hasVibrator() ?? false) {
+      Vibration.vibrate(pattern: [0, 500, 1000, 500], repeat: 1);
+    }
+  }
+
+  void _showDialog({required String title, required String message}) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(title),
+        content: SingleChildScrollView(child: Text(message)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Close'),
           ),
         ],
       ),
-    );
-  }
-
-  Widget _buildLocationInfo() {
-    return Container(
-      width: double.infinity,
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(8),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.location_on, color: AppColors.alertRed, size: 24),
-              SizedBox(width: 8),
-              Text(
-                'Current Location',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 16,
-                  color: AppColors.textDark,
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          Text(
-            _currentLocation,
-            style: TextStyle(fontSize: 14, color: AppColors.textDark),
-          ),
-          SizedBox(height: 16),
-          Row(
-            children: [
-              Icon(
-                Icons.share_location,
-                color: _isLocationSharing
-                    ? AppColors.primarySafetyGreen
-                    : Colors.grey,
-                size: 20,
-              ),
-              SizedBox(width: 8),
-              Text(
-                _isLocationSharing
-                    ? 'Sharing live location'
-                    : 'Location sharing off',
-                style: TextStyle(
-                  color: _isLocationSharing
-                      ? AppColors.primarySafetyGreen
-                      : Colors.grey,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              Spacer(),
-              Switch(
-                value: _isLocationSharing,
-                onChanged: (value) {
-                  setState(() {
-                    _isLocationSharing = value;
-                  });
-                },
-                activeColor: AppColors.primarySafetyGreen,
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMainEmergencyButton() {
-    return AnimatedBuilder(
-      animation: _pulseAnimation,
-      builder: (context, child) {
-        return Transform.scale(
-          scale: _pulseAnimation.value,
-          child: GestureDetector(
-            onTap: _isCountdownActive ? null : _startEmergencyCountdown,
-            child: Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                color: Colors.white,
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withOpacity(0.3),
-                    blurRadius: 20,
-                    offset: Offset(0, 10),
-                  ),
-                ],
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(Icons.emergency, size: 60, color: AppColors.alertRed),
-                  SizedBox(height: 8),
-                  Text(
-                    'EMERGENCY',
-                    style: TextStyle(
-                      color: AppColors.alertRed,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  Text(
-                    'CALL',
-                    style: TextStyle(
-                      color: AppColors.alertRed,
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        );
-      },
-    );
-  }
-
-  Widget _buildQuickActions() {
-    return Row(
-      children: [
-        Expanded(
-          child: _buildQuickActionCard(
-            icon: Icons.volume_off,
-            title: 'Silent\nAlarm',
-            isActive: _silentMode,
-            onTap: () {
-              setState(() {
-                _silentMode = !_silentMode;
-              });
-            },
-          ),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: _buildQuickActionCard(
-            icon: Icons.phone_callback,
-            title: 'Fake\nCall',
-            isActive: false,
-            onTap: _startFakeCall,
-          ),
-        ),
-        SizedBox(width: 12),
-        Expanded(
-          child: _buildQuickActionCard(
-            icon: Icons.share,
-            title: 'Share\nLocation',
-            isActive: _isLocationSharing,
-            onTap: _shareLocationWithContacts,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildQuickActionCard({
-    required IconData icon,
-    required String title,
-    required bool isActive,
-    required VoidCallback onTap,
-  }) {
-    return Card(
-      color: isActive ? AppColors.primarySafetyGreen : Colors.white,
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(8),
-        child: Padding(
-          padding: EdgeInsets.all(16),
-          child: Column(
-            children: [
-              Icon(
-                icon,
-                color: isActive ? Colors.white : AppColors.textDark,
-                size: 32,
-              ),
-              SizedBox(height: 8),
-              Text(
-                title,
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: isActive ? Colors.white : AppColors.textDark,
-                  fontWeight: FontWeight.w500,
-                  fontSize: 12,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildEmergencyContacts() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Emergency Services',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        SizedBox(height: 12),
-        SizedBox(
-          height: 100,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: _emergencyContacts.length,
-            itemBuilder: (context, index) {
-              final contact = _emergencyContacts[index];
-              return Container(
-                width: 120,
-                margin: EdgeInsets.only(right: 12),
-                child: Card(
-                  child: InkWell(
-                    onTap: () => _callNumber(contact['number']!),
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: EdgeInsets.all(12),
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            _getEmergencyIcon(contact['icon']!),
-                            size: 32,
-                            color: AppColors.alertRed,
-                          ),
-                          SizedBox(height: 8),
-                          Text(
-                            contact['name']!,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPersonalContacts() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          'Personal Emergency Contacts',
-          style: TextStyle(
-            color: Colors.white,
-            fontSize: 18,
-            fontWeight: FontWeight.bold,
-          ),
-        ),
-        SizedBox(height: 12),
-        Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: ListView.separated(
-            shrinkWrap: true,
-            physics: NeverScrollableScrollPhysics(),
-            itemCount: _personalContacts.length,
-            separatorBuilder: (context, index) => Divider(height: 1),
-            itemBuilder: (context, index) {
-              final contact = _personalContacts[index];
-              return ListTile(
-                leading: CircleAvatar(
-                  backgroundColor: AppColors.primarySafetyGreen,
-                  child: Text(
-                    contact['name']![0],
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                title: Text(contact['name']!),
-                subtitle: Text(contact['number']!),
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        Icons.call,
-                        color: AppColors.primarySafetyGreen,
-                      ),
-                      onPressed: () => _callNumber(contact['number']!),
-                    ),
-                    IconButton(
-                      icon: Icon(Icons.message, color: AppColors.primaryBlue),
-                      onPressed: () => _sendSMS(contact['number']!),
-                    ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 
@@ -519,100 +341,557 @@ class _EmergencySosScreenState extends State<EmergencySosScreen>
     }
   }
 
-  void _startEmergencyCountdown() {
-    setState(() {
-      _isCountdownActive = true;
-      _countdownSeconds = 10;
-    });
+  Future<void> _openEditContactsDialog({required bool isEmergency}) async {
+    List<Map<String, String>> contacts =
+        isEmergency ? _emergencyContacts : _personalContacts;
 
-    _countdownController.forward();
-    _countdownTimer = Timer.periodic(Duration(seconds: 1), (timer) {
-      setState(() {
-        _countdownSeconds--;
-      });
+    TextEditingController nameController = TextEditingController();
+    TextEditingController numberController = TextEditingController();
 
-      if (_countdownSeconds <= 0) {
-        _callEmergencyNow();
-      }
-    });
-  }
-
-  void _cancelCountdown() {
-    _countdownTimer?.cancel();
-    _countdownController.reset();
-    setState(() {
-      _isCountdownActive = false;
-      _countdownSeconds = 10;
-    });
-  }
-
-  void _callEmergencyNow() {
-    _cancelCountdown();
-    _callNumber('10111'); // South African police emergency number
-  }
-
-  void _callNumber(String number) {
-    // We can try use url_launcher to make the call
-    // For now, we'll show a dialog
-    showDialog(
+    await showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Emergency Call'),
-        content: Text('Calling $number...'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Close'),
+      builder: (context) {
+        return StatefulBuilder(builder: (context, setStateDialog) {
+          void _addContact() {
+            if (nameController.text.isEmpty || numberController.text.isEmpty) return;
+            setStateDialog(() {
+              contacts.add({
+                'name': nameController.text,
+                'number': numberController.text,
+                if (isEmergency) 'icon': 'custom'
+              });
+            });
+            nameController.clear();
+            numberController.clear();
+          }
+
+          void _removeContact(int index) {
+            setStateDialog(() {
+              contacts.removeAt(index);
+            });
+          }
+
+          return AlertDialog(
+            title: Text(isEmergency
+                ? 'Edit Emergency Contacts'
+                : 'Edit Personal Contacts'),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 400),
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ListView.builder(
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      itemCount: contacts.length,
+                      itemBuilder: (context, index) {
+                        final contact = contacts[index];
+                        return ListTile(
+                          title: Text('${contact['name']}'),
+                          subtitle: Text('${contact['number']}'),
+                          trailing: IconButton(
+                            icon: const Icon(Icons.delete, color: Colors.red),
+                            onPressed: () => _removeContact(index),
+                          ),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(labelText: 'Name'),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: numberController,
+                      decoration: const InputDecoration(labelText: 'Number'),
+                      keyboardType: TextInputType.phone,
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton(
+                      onPressed: _addContact,
+                      child: const Text('Add Contact'),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  if (isEmergency) {
+                    _emergencyContacts = List.from(contacts);
+                  } else {
+                    _personalContacts = List.from(contacts);
+                  }
+                  _savePreferences();
+                  Navigator.pop(context);
+                  setState(() {}); // Refresh UI
+                },
+                child: const Text('Save'),
+              ),
+            ],
+          );
+        });
+      },
+    );
+  }
+
+  Widget _buildContactTile({
+    required String name,
+    required String number,
+    required IconData icon,
+    required VoidCallback onCall,
+    required VoidCallback onSMS,
+  }) {
+    return Container(
+      width: 140,
+      margin: const EdgeInsets.symmetric(vertical: 6),
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: Colors.white.withOpacity(0.08),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, color: Colors.white),
+          const SizedBox(height: 6),
+          Text(
+            name,
+            style: const TextStyle(
+              fontWeight: FontWeight.bold,
+              fontSize: 12,
+              color: Colors.white,
+            ),
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            number,
+            style: const TextStyle(fontSize: 11, color: Colors.white70),
+            overflow: TextOverflow.ellipsis,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.call, size: 18, color: Colors.white),
+                onPressed: onCall,
+              ),
+              const SizedBox(width: 8),
+              IconButton(
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                icon: const Icon(Icons.sms, size: 18, color: Colors.white),
+                onPressed: onSMS,
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  void _sendSMS(String number) {
-    //We can try use url_launcher to send SMS
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Emergency SMS'),
-        content: Text('Sending emergency message to $number...'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Close'),
+  Widget _buildRightPane(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Status and toggles
+        Card(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.only(bottom: 12),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 14),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Current Location',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  _currentLocation,
+                  style: const TextStyle(fontSize: 14),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 6,
+                  children: [
+                    ElevatedButton.icon(
+                      onPressed: _toggleSilentMode,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _silentMode ? Colors.grey[800] : AppColors.alertRed,
+                      ),
+                      icon: Icon(_silentMode ? Icons.volume_off : Icons.volume_up),
+                      label: Text(_silentMode ? 'Silent On' : 'Silent Off'),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _shareLocationWithContacts,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor:
+                            _isLocationSharing ? Colors.green[700] : Colors.blueGrey[700],
+                      ),
+                      icon: Icon(_isLocationSharing ? Icons.location_on : Icons.location_off),
+                      label: Text(_isLocationSharing ? 'Sharing' : 'Share Location'),
+                    ),
+                    ElevatedButton.icon(
+                      onPressed: _startFakeCall,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.alertRed,
+                      ),
+                      icon: const Icon(Icons.phone_in_talk_rounded),
+                      label: const Text('Fake Call'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ],
+        ),
+        // Contacts sections
+        const SizedBox(height: 4),
+        const Text(
+          'Emergency Contacts',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 170,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              ..._emergencyContacts.map(
+                (c) => Row(
+                  children: [
+                    _buildContactTile(
+                      name: c['name']!,
+                      number: c['number']!,
+                      icon: _getEmergencyIcon(c['icon'] ?? ''),
+                      onCall: () => _callNumber(c['number']!),
+                      onSMS: () => _sendSMS(c['number']!),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+              ),
+              // edit button
+              GestureDetector(
+                onTap: () => _openEditContactsDialog(isEmergency: true),
+                child: Container(
+                  width: 140,
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white54),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withOpacity(0.06),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.edit, color: Colors.white),
+                      SizedBox(height: 6),
+                      Text(
+                        'Edit',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        const Text(
+          'Personal Contacts',
+          style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+        ),
+        const SizedBox(height: 6),
+        SizedBox(
+          height: 170,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            children: [
+              ..._personalContacts.map(
+                (c) => Row(
+                  children: [
+                    _buildContactTile(
+                      name: c['name']!,
+                      number: c['number']!,
+                      icon: Icons.person,
+                      onCall: () => _callNumber(c['number']!),
+                      onSMS: () => _sendSMS(c['number']!),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
+                ),
+              ),
+              GestureDetector(
+                onTap: () => _openEditContactsDialog(isEmergency: false),
+                child: Container(
+                  width: 140,
+                  margin: const EdgeInsets.symmetric(vertical: 6),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.white54),
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white.withOpacity(0.06),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: const [
+                      Icon(Icons.edit, color: Colors.white),
+                      SizedBox(height: 6),
+                      Text(
+                        'Edit',
+                        style: TextStyle(color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildEmergencyPanel(double maxSize) {
+    return ScaleTransition(
+      scale: _pulseAnimation,
+      child: SizedBox(
+        width: maxSize,
+        height: maxSize,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            shape: BoxShape.circle,
+          ),
+          alignment: Alignment.center,
+          child: _isCountdownActive
+              ? ScaleTransition(
+                  scale: _countdownAnimation,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '$_countdownSeconds',
+                        style: const TextStyle(
+                          fontSize: 64,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.alertRed,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Calling emergency services',
+                        textAlign: TextAlign.center,
+                        style: Theme.of(context)
+                            .textTheme
+                            .titleMedium
+                            ?.copyWith(color: AppColors.alertRed),
+                      ),
+                      const SizedBox(height: 16),
+                      Wrap(
+                        alignment: WrapAlignment.center,
+                        spacing: 12,
+                        children: [
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.alertRed,
+                            ),
+                            onPressed: _cancelCountdown,
+                            child: const Text('Cancel'),
+                          ),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.alertRed,
+                            ),
+                            onPressed: _callEmergencyNow,
+                            child: const Text('Call Now'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text(
+                      'PRESS EMERGENCY BUTTON',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 20,
+                        color: AppColors.alertRed,
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Text(
+                      'Current Location:',
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleMedium
+                          ?.copyWith(color: Colors.black87),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      _currentLocation,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                          fontSize: 14, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: 16),
+                    ElevatedButton(
+                      onPressed: _startEmergencyCountdown,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.alertRed,
+                        shape: const CircleBorder(),
+                        padding: const EdgeInsets.all(0),
+                        fixedSize: const Size(140, 140),
+                      ),
+                      child: const Icon(
+                        Icons.warning_amber_rounded,
+                        size: 80,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+                    ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.white,
+                        foregroundColor: AppColors.alertRed,
+                        padding:
+                            const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      ),
+                      onPressed: _startFakeCall,
+                      icon: const Icon(Icons.phone_in_talk_rounded),
+                      label: const Text(
+                        'Fake Call',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                      ),
+                    ),
+                  ],
+                ),
+        ),
       ),
     );
   }
 
-  void _startFakeCall() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Fake Call'),
-        content: Text('Starting fake call for safety...'),
+  @override
+  Widget build(BuildContext context) {
+    final wide = MediaQuery.of(context).size.width >= 800;
+    final screenHeight = MediaQuery.of(context).size.height;
+
+    return Scaffold(
+      backgroundColor: AppColors.alertRed,
+      appBar: AppBar(
+        backgroundColor: AppColors.alertRed,
+        foregroundColor: Colors.white,
+        title: const Text(
+          'EMERGENCY SOS',
+          style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.2),
+        ),
+        centerTitle: true,
+        elevation: 0,
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Close'),
+          IconButton(
+            icon: Icon(_silentMode ? Icons.volume_off : Icons.volume_up),
+            tooltip: _silentMode ? 'Silent Mode On' : 'Silent Mode Off',
+            onPressed: _toggleSilentMode,
+          ),
+          IconButton(
+            icon: Icon(
+                _isLocationSharing ? Icons.location_on : Icons.location_off),
+            tooltip:
+                _isLocationSharing ? 'Stop Location Sharing' : 'Start Location Sharing',
+            onPressed: _shareLocationWithContacts,
+          ),
+          IconButton(
+            icon: const Icon(Icons.settings),
+            tooltip: 'Edit Contacts',
+            onPressed: () {
+              showModalBottomSheet(
+                context: context,
+                builder: (context) => SizedBox(
+                  height: 220,
+                  child: Column(
+                    children: [
+                      ListTile(
+                        leading: const Icon(Icons.local_police),
+                        title: const Text('Edit Emergency Contacts'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _openEditContactsDialog(isEmergency: true);
+                        },
+                      ),
+                      ListTile(
+                        leading: const Icon(Icons.person),
+                        title: const Text('Edit Personal Contacts'),
+                        onTap: () {
+                          Navigator.pop(context);
+                          _openEditContactsDialog(isEmergency: false);
+                        },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
           ),
         ],
       ),
-    );
-  }
-
-  void _shareLocationWithContacts() {
-    setState(() {
-      _isLocationSharing = !_isLocationSharing;
-    });
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          _isLocationSharing
-              ? 'Location sharing enabled'
-              : 'Location sharing disabled',
+      body: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(14),
+          child: wide
+              ? Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Left emergency panel
+                    Expanded(
+                      flex: 4,
+                      child: Center(
+                        child: _buildEmergencyPanel(
+                          MediaQuery.of(context).size.width * 0.35,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 24),
+                    // Right info / contacts
+                    Expanded(
+                      flex: 5,
+                      child: SingleChildScrollView(
+                        child: _buildRightPane(context),
+                      ),
+                    ),
+                  ],
+                )
+              : SingleChildScrollView(
+                  child: Column(
+                    children: [
+                      _buildEmergencyPanel(
+                        MediaQuery.of(context).size.width * 0.85,
+                      ),
+                      const SizedBox(height: 20),
+                      _buildRightPane(context),
+                    ],
+                  ),
+                ),
         ),
       ),
     );
